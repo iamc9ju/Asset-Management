@@ -1,0 +1,27 @@
+{
+  "name": "asset-management",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.15.0",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "test": "turbo test",
+    "typecheck": "turbo typecheck",
+    "format": "prettier --write .",
+    "infra:up": "docker compose up -d postgres redis seaweed-master seaweed-volume seaweed-filer seaweed-s3",
+    "infra:down": "docker compose down",
+    "docker:up": "docker compose --profile app up --build",
+    "docker:down": "docker compose --profile app down"
+  },
+  "devDependencies": {
+    "prettier": "^3.6.2",
+    "turbo": "^2.5.6",
+    "typescript": "^5.9.2"
+  }
+}
+
