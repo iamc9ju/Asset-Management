@@ -64,7 +64,10 @@
 - [x] จัดทำ local development guide
 - [ ] เพิ่ม automated formatting check
 - [ ] เพิ่ม lint rules ที่มากกว่า TypeScript typecheck
-- [x] เพิ่ม CI pipeline สำหรับ install, lint, typecheck, test และ build
+- [x] เพิ่ม GitHub Actions CI สำหรับ install, lint, typecheck, test และ build
+- [x] ตั้ง Ruleset ป้องกัน branch `main`
+- [x] กำหนด CI เป็น required status check
+- [x] ป้องกัน force push และการลบ `main`
 - [ ] เพิ่ม dependency/security scanning
 
 ### 3. Local Infrastructure
@@ -313,6 +316,9 @@
 - กำหนด `GITHUB_TOKEN` เป็น `contents: read`
 - ปิด checkout credential persistence
 - Pin external actions ด้วย full commit SHA พร้อมกำกับ release version
+- ตั้ง GitHub Ruleset แบบ Active สำหรับ branch `main`
+- กำหนด CI job เป็น required status check ก่อน merge
+- ป้องกัน force push และการลบ branch `main`
 
 ผลการตรวจสอบ:
 
@@ -324,6 +330,7 @@
 - GitHub CI intentional-failure run: `34093165960`
 - GitHub CI recovery run: `34093467856`
 - Failure probe ถูกลบแล้วและไม่อยู่ใน final diff
+- ผู้ดูแล repository ยืนยันว่า Ruleset และ required CI check เปิดใช้งานแล้ว
 
 ไฟล์สำคัญ:
 
