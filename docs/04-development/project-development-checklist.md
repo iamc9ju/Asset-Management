@@ -64,7 +64,7 @@
 - [x] จัดทำ local development guide
 - [ ] เพิ่ม automated formatting check
 - [ ] เพิ่ม lint rules ที่มากกว่า TypeScript typecheck
-- [ ] เพิ่ม CI pipeline สำหรับ install, lint, typecheck, test และ build
+- [x] เพิ่ม CI pipeline สำหรับ install, lint, typecheck, test และ build
 - [ ] เพิ่ม dependency/security scanning
 
 ### 3. Local Infrastructure
@@ -182,6 +182,8 @@
 - [x] เพิ่ม unit tests สำหรับ Request ID middleware
 - [x] เพิ่ม unit tests สำหรับ error-detail sanitization
 - [x] เพิ่ม integration tests สำหรับ Global Exception Filter
+- [x] เพิ่ม GitHub Actions CI พร้อม frozen lockfile, pnpm cache และ read-only permissions
+- [x] ทดสอบว่า CI ปฏิเสธ TypeScript error และกลับมาผ่านหลังแก้ไข
 - [ ] กำหนด test pyramid และ coverage expectations
 - [ ] เพิ่ม API end-to-end test environment
 - [ ] เพิ่ม structured application logs
@@ -207,7 +209,7 @@
 
 ## Verification Baseline
 
-หลักฐานล่าสุดที่บันทึกไว้ ณ 2026-09-06:
+หลักฐานล่าสุดที่บันทึกไว้ ณ 2026-09-07:
 
 | Area                           | Verification                                        | Result                                          |
 | ------------------------------ | --------------------------------------------------- | ----------------------------------------------- |
@@ -215,6 +217,9 @@
 | Backend types                  | `pnpm --filter @asset-management/api run typecheck` | Passed                                          |
 | Backend production compilation | `pnpm --filter @asset-management/api run build`     | Passed                                          |
 | Infrastructure readiness       | `GET /api/v1/health/ready`                          | PostgreSQL, Redis และ SeaweedFS เคยตอบ `up` ครบ |
+| Monorepo quality gate          | GitHub Actions CI run `34092917110`                 | Passed                                          |
+| CI failure gate                | GitHub Actions CI run `34093165960`                 | TypeScript error ถูกปฏิเสธตามที่ออกแบบ          |
+| CI recovery                    | GitHub Actions CI run `34093467856`                 | Passed หลังนำ failure probe ออก                 |
 
 เมื่อมีการเปลี่ยนแปลงที่เกี่ยวข้อง ให้เพิ่ม verification record ใหม่ใน Completed Work Log แทนการแก้ผลเก่าให้ดูเหมือนเป็นผลล่าสุด
 
@@ -287,6 +292,49 @@
 - `apps/api/src/shared/http/errors/`
 - `apps/api/src/shared/http/validation/`
 - `apps/api/src/shared/http/request-id/`
+
+### 2026-09-07 — GitHub Actions Continuous Integration
+
+สถานะ: เสร็จและตรวจสอบแล้ว
+
+เป้าหมายและขอบเขต:
+
+- ตรวจ monorepo อัตโนมัติเมื่อเปิด Pull Request เข้า `main`, push เข้า `main` หรือสั่งรันด้วยตนเอง
+- งานนี้เป็น Continuous Integration เท่านั้น ไม่รวม deployment หรือ production secrets
+
+สิ่งที่ทำ:
+
+- เพิ่ม workflow `.github/workflows/ci.yml`
+- ใช้ Node.js 22 และ pnpm version จาก root `packageManager`
+- เปิด pnpm-store cache โดยใช้ `pnpm-lock.yaml` เป็น dependency source of truth
+- ติดตั้ง dependencies ด้วย frozen lockfile
+- รัน lint, typecheck, tests และ production build ทั้ง monorepo
+- เพิ่ม concurrency cancellation และ job timeout
+- กำหนด `GITHUB_TOKEN` เป็น `contents: read`
+- ปิด checkout credential persistence
+- Pin external actions ด้วย full commit SHA พร้อมกำกับ release version
+
+ผลการตรวจสอบ:
+
+- Local lint: 4 packages passed
+- Local typecheck: 4 packages passed
+- Local tests: Backend 3 suites/10 tests passed; Web ยังไม่มี test files
+- Local production build: API และ Web passed
+- GitHub CI success run: `34092917110`
+- GitHub CI intentional-failure run: `34093165960`
+- GitHub CI recovery run: `34093467856`
+- Failure probe ถูกลบแล้วและไม่อยู่ใน final diff
+
+ไฟล์สำคัญ:
+
+- `.github/workflows/ci.yml`
+- `docs/04-development/project-development-checklist.md`
+
+สิ่งที่ยังไม่ครอบคลุมและความเสี่ยงคงเหลือ:
+
+- Frontend ยังไม่มี test files และใช้ `--passWithNoTests`
+- CI ยังไม่มี database/infrastructure integration tests
+- Continuous Deployment ยังไม่อยู่ในขอบเขต
 
 ## Blocked Items
 
