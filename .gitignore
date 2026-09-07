@@ -1,0 +1,40 @@
+.DS_Store
+.idea/
+
+# Local environment and package-manager credentials
+.env
+.env.*
+!.env.example
+.npmrc.local
+credentials.local.json
+secrets.local.*
+
+# Private keys and certificates
+*.key
+*.pem
+*.p12
+*.pfx
+*.jks
+*.keystore
+id_rsa*
+id_ed25519*
+
+# Local databases, backups, and database dumps
+*.sqlite
+*.sqlite3
+*.db
+*.dump
+*.bak
+
+# Dependencies, caches, and generated output
+node_modules/
+.pnpm-store/
+.turbo/
+dist/
+coverage/
+*.log
+*.tsbuildinfo
+apps/web/.vite/
+apps/web/dist/
+apps/api/dist/
+storage-data/

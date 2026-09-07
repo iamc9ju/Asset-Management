@@ -1,0 +1,120 @@
+name: asset-management
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-asset_management}
+      POSTGRES_USER: ${POSTGRES_USER:-asset_app}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-asset_dev_password}
+    ports:
+      - "${POSTGRES_PORT_FORWARD:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-asset_app} -d ${POSTGRES_DB:-asset_management}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks: [asset-network]
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:-asset_dev_password}"]
+    ports:
+      - "${REDIS_PORT_FORWARD:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-asset_dev_password}", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks: [asset-network]
+
+  seaweed-master:
+    image: chrislusf/seaweedfs:4.41
+    command: "master -ip=seaweed-master -mdir=/data"
+    ports:
+      - "9333:9333"
+      - "19333:19333"
+    volumes:
+      - seaweed-master-data:/data
+    networks: [asset-network]
+
+  seaweed-volume:
+    image: chrislusf/seaweedfs:4.41
+    command: "volume -mserver=seaweed-master:9333 -ip=seaweed-volume -dir=/data -max=10"
+    depends_on: [seaweed-master]
+    ports:
+      - "8080:8080"
+      - "18080:18080"
+    volumes:
+      - seaweed-volume-data:/data
+    networks: [asset-network]
+
+  seaweed-filer:
+    image: chrislusf/seaweedfs:4.41
+    command: "filer -master=seaweed-master:9333"
+    depends_on: [seaweed-master, seaweed-volume]
+    ports:
+      - "8888:8888"
+      - "18888:18888"
+    volumes:
+      - ./infra/seaweedfs/filer.toml:/etc/seaweedfs/filer.toml:ro
+      - seaweed-filer-data:/data
+    networks: [asset-network]
+
+  seaweed-s3:
+    image: chrislusf/seaweedfs:4.41
+    command: "s3 -filer=seaweed-filer:8888 -ip.bind=0.0.0.0 -config=/etc/seaweedfs/s3.json"
+    depends_on: [seaweed-filer]
+    ports:
+      - "8333:8333"
+    volumes:
+      - ./infra/seaweedfs/s3.json:/etc/seaweedfs/s3.json:ro
+    networks: [asset-network]
+
+  api:
+    profiles: [app]
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    env_file: .env
+    environment:
+      POSTGRES_HOST: postgres
+      REDIS_HOST: redis
+      S3_ENDPOINT: http://seaweed-s3:8333
+    ports:
+      - "${API_PORT:-3000}:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      seaweed-s3:
+        condition: service_started
+    networks: [asset-network]
+
+  web:
+    profiles: [app]
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:3000/api/v1}
+    ports:
+      - "${WEB_PORT:-5173}:80"
+    depends_on: [api]
+    networks: [asset-network]
+
+volumes:
+  postgres-data:
+  redis-data:
+  seaweed-master-data:
+  seaweed-volume-data:
+  seaweed-filer-data:
+
+networks:
+  asset-network:
+    driver: bridge
