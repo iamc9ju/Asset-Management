@@ -24,6 +24,7 @@
 - [ADR-0002: Modular Monolith](03-decisions/0002-modular-monolith.md)
 - [ADR-0003: Infrastructure](03-decisions/0003-infrastructure.md)
 - [Project Development Checklist](04-development/project-development-checklist.md)
+- [Structured Logging Implementation Plan](04-development/structured-logging-implementation-plan.md)
 - [Local Development](04-guides/local-development.md)
 - [API Documentation](05-api/README.md)
 - [Database Documentation](06-database/README.md)
