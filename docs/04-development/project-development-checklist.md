@@ -22,8 +22,8 @@
 
 สถานะ: ยังไม่เริ่ม
 
-- [ ] ตรวจสอบ logging implementation และข้อกำหนดในระบบปัจจุบัน
-- [ ] เปรียบเทียบ NestJS Logger, Pino และ Winston
+- [x] ตรวจสอบ logging implementation และข้อกำหนดในระบบปัจจุบัน
+- [x] เปรียบเทียบ NestJS Logger, Pino และ Winston
 - [ ] ตัดสินใจ logging architecture และบันทึก ADR หากมีผลระยะยาว
 - [ ] กำหนด structured log schema
 - [ ] กำหนด log levels และ event-name catalog
