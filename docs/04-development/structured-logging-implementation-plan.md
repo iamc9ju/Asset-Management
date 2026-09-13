@@ -1,6 +1,6 @@
 # Structured Logging และ HTTP Request Observability — Implementation Plan
 
-- สถานะเอกสาร: Implemented — local verification complete, CI pending
+- สถานะเอกสาร: Implemented and verified
 - อัปเดตล่าสุด: 2026-09-13
 - ขอบเขต: `apps/api`
 - ผู้ตัดสินใจ: Project owner
@@ -541,7 +541,7 @@ pnpm-lock.yaml
 
 - [x] เจ้าของโปรเจกต์อนุมัติ Pino + `nestjs-pino`
 - [x] ADR-0004 ถูกสร้างและ merge
-- [ ] Dependencies compatible กับ NestJS 11 และ Node.js 22 — รอ CI ของ implementation branch; local ใช้ Node.js 25.9.0
+- [x] Dependencies compatible กับ NestJS 11 และ Node.js 22 ผ่าน GitHub Actions CI
 - [x] Logging environment variables มี startup validation
 - [x] Production logs เป็น valid single-line JSON
 - [x] Development logs อ่านง่ายตาม decision
@@ -555,7 +555,7 @@ pnpm-lock.yaml
 - [x] Lint, typecheck และ production build ผ่าน
 - [x] HTTP verification ครบ `2xx`, `400`, `404`, `409`, `500`
 - [x] Checklist และ operational documentation ถูกอัปเดต
-- [ ] GitHub Actions CI ผ่านก่อน merge
+- [x] GitHub Actions CI ผ่านก่อน merge
 
 ## 23. Decision Summary
 

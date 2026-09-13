@@ -18,26 +18,20 @@
 
 ## Current Focus
 
-### Structured Logging และ HTTP Request Observability
+### Authentication และ Session Strategy
 
-สถานะ: Implemented และ local verification ผ่าน; รอ GitHub Actions CI
+สถานะ: Architecture decision ได้รับการอนุมัติ; รอ merge เอกสาร
 
-- [x] ตรวจสอบ logging implementation และข้อกำหนดในระบบปัจจุบัน
-- [x] เปรียบเทียบ NestJS Logger, Pino และ Winston
-- [x] ตัดสินใจ logging architecture และบันทึก ADR หากมีผลระยะยาว
-- [x] กำหนด structured log schema
-- [x] กำหนด log levels และ event-name catalog
-- [x] กำหนด redaction policy สำหรับ headers, body, credentials และ PII
-- [x] ออกแบบ request lifecycle logging พร้อม `request_id`
-- [x] ออกแบบการเชื่อมต่อกับ Global Exception Filter
-- [x] กำหนด environment configuration และ startup validation
-- [x] วางแผน health-check log suppression หรือ sampling
-- [x] วางแผน unit และ integration tests
-- [x] Review และอนุมัติ implementation plan
-- [x] Implement ตามแผนที่อนุมัติ
-- [x] Formatter, tests, typecheck และ production build ผ่านใน local environment
-- [x] อัปเดต checklist และเอกสารที่เกี่ยวข้อง
-- [ ] GitHub Actions CI ผ่านสำหรับ implementation branch
+- [x] ทบทวน authentication requirements และ Architecture Baseline
+- [x] กำหนด password hashing และ account-enumeration policy
+- [x] กำหนด access-token format, claims และอายุใช้งาน
+- [x] กำหนด refresh-token storage, rotation และ reuse detection
+- [x] กำหนด server-side session lifecycle และ revocation
+- [x] กำหนด RBAC และ object-scope authorization boundary
+- [x] กำหนด cookie, CORS, CSRF และ rate-limit policy
+- [x] กำหนด security logging และ required verification
+- [x] สร้างและอนุมัติ ADR-0005
+- [ ] Merge ADR-0005 เข้าสู่ `main`
 
 ## Milestone Checklist
 
@@ -50,7 +44,7 @@
 - [x] บันทึก ADR สำหรับ Modular Monolith
 - [x] บันทึก ADR สำหรับ infrastructure baseline
 - [ ] Review requirements และ architecture ก่อนเริ่มแต่ละ domain module
-- [ ] จัดทำ ADR สำหรับ authentication และ session strategy
+- [x] จัดทำ ADR สำหรับ authentication และ session strategy
 - [x] จัดทำ ADR สำหรับ structured logging หากเลือก external logging framework
 - [ ] จัดทำ threat model ก่อนเปิดใช้งาน production
 
@@ -339,7 +333,7 @@
 
 ### 2026-09-13 — Structured Logging และ HTTP Request Observability
 
-สถานะ: Implemented และ local verification ผ่าน; รอ GitHub Actions CI
+สถานะ: เสร็จและตรวจสอบแล้ว
 
 เป้าหมายและขอบเขต:
 
@@ -376,6 +370,7 @@ Architecture/technical decisions:
 - Production build: API และ Web passed
 - Runtime verification: JSON terminal log, request ID correlation, lifecycle start/stop logs และการปิด raw SQL logs ผ่าน
 - Local runtime: Node.js 25.9.0
+- GitHub Actions CI: ผ่านบน Node.js 22 ก่อน merge
 
 ไฟล์หรือเอกสารสำคัญ:
 
@@ -388,14 +383,12 @@ Architecture/technical decisions:
 
 สิ่งที่ยังไม่ครอบคลุมและความเสี่ยงคงเหลือ:
 
-- GitHub Actions CI ของ implementation branch ยังไม่ผ่าน จึงยังไม่มีหลักฐานกับ Node.js 22 สำหรับ change set นี้
 - Centralized log collection, retention, access control, metrics, tracing และ alerting อยู่นอกขอบเขต
 - Business audit-log persistence ต้องออกแบบแยกจาก operational logs
 
 งานถัดไป:
 
-- Push implementation branch และยืนยัน GitHub Actions CI
-- ตัดสินใจ Authentication และ Session Strategy พร้อม ADR
+- Merge Authentication และ Session Strategy ADR
 - เพิ่ม OpenAPI ก่อนเริ่ม domain endpoints
 
 ## Blocked Items
@@ -404,9 +397,9 @@ Architecture/technical decisions:
 
 ## Next Recommended Tasks
 
-1. ตัดสินใจ Authentication และ Session Strategy พร้อม ADR
-2. เพิ่ม OpenAPI ก่อนเริ่มขยาย domain endpoints
-3. ออกแบบ Initial Database Schema และ Migration Plan
+1. เพิ่ม OpenAPI ก่อนเริ่มขยาย domain endpoints
+2. ออกแบบ Initial Database Schema และ Migration Plan
+3. จัดทำ Authentication Implementation Plan
 4. เริ่ม User/Authentication module ก่อน Asset workflows ที่ต้องใช้ actor และ permission
 5. กำหนด test pyramid และ coverage expectations
 
