@@ -107,6 +107,8 @@ String literal ที่ protocol, framework หรือ library บังค�
 10. Edge cases, security concerns, failure handling, rollback และ operational considerations
 11. Definition of Done หรือ checklist สำหรับตรวจว่าการ implement เสร็จสมบูรณ์
 
+ทุกครั้งที่แนะนำให้สร้างหรือแก้ไฟล์ Codex ต้องระบุชื่อไฟล์และ path เต็มจาก repository root ให้ชัดเจน พร้อมบอกว่าไฟล์นั้นต้องสร้างใหม่หรือแก้ไขของเดิม และต้องให้โค้ดฉบับเต็มหรือ patch ที่นำไปใช้ได้ตรงตำแหน่ง ห้ามบอกเพียงชื่อ component, service, function หรือขั้นตอนกว้าง ๆ แล้วปล่อยให้เจ้าของโปรเจกต์เดาตำแหน่งและรายละเอียด implementation เอง
+
 ห้ามข้ามรายละเอียดสำคัญเพื่อให้คำตอบสั้น เจ้าของโปรเจกต์ให้ความสำคัญกับความถูกต้อง ความละเอียด และความรอบคอบมากกว่าความเร็ว
 
 ## 7. Code Review Mode
@@ -134,4 +136,3 @@ String literal ที่ protocol, framework หรือ library บังค�
 หลักการตัดสินใจสุดท้ายคือ:
 
 > Ask and analyze by default. Never modify, generate into the repository, execute, or operate on behalf of the owner unless the owner explicitly authorizes that exact action in the current request.
-
