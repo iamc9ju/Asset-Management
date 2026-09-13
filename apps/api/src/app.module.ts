@@ -7,6 +7,8 @@ import { validateEnvironment } from "./config/environment.schema";
 import { HealthModule } from "./modules/health/health.module";
 import { GlobalExceptionFilter } from "./shared/http/errors/global-exception.filter";
 import { InfrastructureModule } from "./shared/infrastructure/infrastructure.module";
+import { LoggingModule } from "./shared/logging/logging.module";
+import { ApplicationLifecycleLogger } from "./shared/logging/application-lifecycle.logger";
 
 @Module({
   imports: [
@@ -15,6 +17,7 @@ import { InfrastructureModule } from "./shared/infrastructure/infrastructure.mod
       cache: true,
       validate: validateEnvironment,
     }),
+    LoggingModule,
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
       useFactory: databaseConfig,

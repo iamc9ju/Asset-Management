@@ -1,5 +1,17 @@
 import { z } from "zod";
 
+export const LOG_LEVELS = [
+  "trace",
+  "debug",
+  "info",
+  "warn",
+  "error",
+  "fatal",
+  "silent",
+] as const;
+
+const logLevelSchema = z.enum(LOG_LEVELS);
+
 const portSchema = z.coerce.number().int().min(1).max(65_535);
 //coerce พยายามแปลงค่าให้เป็น number
 
@@ -38,6 +50,10 @@ export const environmentSchema = z
     API_PORT: portSchema.default(3000),
     WEB_ORIGIN: httpUrlSchema,
 
+    LOG_LEVEL: logLevelSchema.optional(),
+    LOG_PRETTY: booleanSchema.optional(),
+    LOG_HEALTH_REQUESTS: booleanSchema.optional(),
+
     POSTGRES_HOST: z.string().trim().min(1),
     POSTGRES_PORT: portSchema.default(5432),
     POSTGRES_DB: z.string().trim().min(1),
@@ -75,6 +91,14 @@ export const environmentSchema = z
   .superRefine((environment, context) => {
     if (environment.NODE_ENV !== "production") {
       return;
+    }
+
+    if (environment.LOG_PRETTY === true) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["LOG_PRETTY"],
+        message: "must be false in production",
+      });
     }
 
     const secrets = [

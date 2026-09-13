@@ -2,7 +2,7 @@
 
 เอกสารนี้เป็น source of truth สำหรับติดตามสถานะการพัฒนาและประวัติงานที่เสร็จแล้ว โดยใช้ร่วมกับ Git history, requirements, architecture baseline และ ADRs
 
-- อัปเดตล่าสุด: 2026-09-07
+- อัปเดตล่าสุด: 2026-09-13
 - เขตเวลา: Asia/Bangkok
 - ขอบเขตปัจจุบัน: MVP
 
@@ -20,23 +20,24 @@
 
 ### Structured Logging และ HTTP Request Observability
 
-สถานะ: ยังไม่เริ่ม
+สถานะ: Implemented และ local verification ผ่าน; รอ GitHub Actions CI
 
 - [x] ตรวจสอบ logging implementation และข้อกำหนดในระบบปัจจุบัน
 - [x] เปรียบเทียบ NestJS Logger, Pino และ Winston
-- [ ] ตัดสินใจ logging architecture และบันทึก ADR หากมีผลระยะยาว
-- [ ] กำหนด structured log schema
-- [ ] กำหนด log levels และ event-name catalog
-- [ ] กำหนด redaction policy สำหรับ headers, body, credentials และ PII
-- [ ] ออกแบบ request lifecycle logging พร้อม `request_id`
-- [ ] ออกแบบการเชื่อมต่อกับ Global Exception Filter
-- [ ] กำหนด environment configuration และ startup validation
-- [ ] วางแผน health-check log suppression หรือ sampling
-- [ ] วางแผน unit และ integration tests
-- [ ] Review และอนุมัติ implementation plan
-- [ ] Implement ตามแผนที่อนุมัติ
-- [ ] Formatter, tests, typecheck และ production build ผ่าน
-- [ ] อัปเดต checklist และเอกสารที่เกี่ยวข้อง
+- [x] ตัดสินใจ logging architecture และบันทึก ADR หากมีผลระยะยาว
+- [x] กำหนด structured log schema
+- [x] กำหนด log levels และ event-name catalog
+- [x] กำหนด redaction policy สำหรับ headers, body, credentials และ PII
+- [x] ออกแบบ request lifecycle logging พร้อม `request_id`
+- [x] ออกแบบการเชื่อมต่อกับ Global Exception Filter
+- [x] กำหนด environment configuration และ startup validation
+- [x] วางแผน health-check log suppression หรือ sampling
+- [x] วางแผน unit และ integration tests
+- [x] Review และอนุมัติ implementation plan
+- [x] Implement ตามแผนที่อนุมัติ
+- [x] Formatter, tests, typecheck และ production build ผ่านใน local environment
+- [x] อัปเดต checklist และเอกสารที่เกี่ยวข้อง
+- [ ] GitHub Actions CI ผ่านสำหรับ implementation branch
 
 ## Milestone Checklist
 
@@ -50,7 +51,7 @@
 - [x] บันทึก ADR สำหรับ infrastructure baseline
 - [ ] Review requirements และ architecture ก่อนเริ่มแต่ละ domain module
 - [ ] จัดทำ ADR สำหรับ authentication และ session strategy
-- [ ] จัดทำ ADR สำหรับ structured logging หากเลือก external logging framework
+- [x] จัดทำ ADR สำหรับ structured logging หากเลือก external logging framework
 - [ ] จัดทำ threat model ก่อนเปิดใช้งาน production
 
 ### 2. Repository และ Developer Experience
@@ -102,7 +103,7 @@
 - [x] แปลง unknown exceptions เป็น `500 INTERNAL_ERROR`
 - [x] ใส่ `request_id` ในทุก error response
 - [x] เพิ่ม tests สำหรับ `400`, `404`, `409` และ `500`
-- [ ] เพิ่ม structured logging และ request observability
+- [x] เพิ่ม structured logging และ request observability
 - [ ] เพิ่ม OpenAPI/Swagger generation
 - [ ] กำหนด API versioning และ deprecation policy
 - [ ] เพิ่ม rate limiting
@@ -186,7 +187,7 @@
 - [x] ทดสอบว่า CI ปฏิเสธ TypeScript error และกลับมาผ่านหลังแก้ไข
 - [ ] กำหนด test pyramid และ coverage expectations
 - [ ] เพิ่ม API end-to-end test environment
-- [ ] เพิ่ม structured application logs
+- [x] เพิ่ม structured application logs
 - [ ] เพิ่ม metrics และ dashboards
 - [ ] เพิ่ม distributed tracing เมื่อมี service boundary ที่ต้องติดตาม
 - [ ] เพิ่ม audit-log integrity controls
@@ -336,17 +337,78 @@
 - CI ยังไม่มี database/infrastructure integration tests
 - Continuous Deployment ยังไม่อยู่ในขอบเขต
 
+### 2026-09-13 — Structured Logging และ HTTP Request Observability
+
+สถานะ: Implemented และ local verification ผ่าน; รอ GitHub Actions CI
+
+เป้าหมายและขอบเขต:
+
+- เพิ่ม structured operational logging สำหรับ NestJS API ผ่าน Pino และ stdout
+- ทำ HTTP request correlation ด้วย `request_id` โดยไม่เปลี่ยน Standard Error Envelope
+- ไม่รวม centralized log platform, distributed tracing, metrics หรือ business audit log
+
+สิ่งที่ทำ:
+
+- เพิ่ม environment-aware logging configuration สำหรับ development, test และ production
+- เพิ่ม JSON schema ที่ใช้ `timestamp`, `message`, stable event names และ snake_case HTTP fields
+- เพิ่ม HTTP terminal log หนึ่งรายการต่อ request พร้อม normalized route, status และ duration
+- ใช้ Request ID เดียวกันใน response header, error envelope และ log
+- ย้าย HTTP error-log ownership ออกจาก Global Exception Filter เพื่อตัด duplicate logs
+- เพิ่ม allowlisted serializers, centralized redaction และ secret-canary integration tests
+- suppress successful health/readiness logs โดยค่าเริ่มต้น และคง failed readiness logs ระดับ `error`
+- เพิ่ม `application_started` และ `application_stopping` พร้อม flush asynchronous pretty transport ตอน shutdown
+- ปิด TypeORM raw query logging เพื่อไม่ให้ SQL ข้าม structured logging policy
+
+Architecture/technical decisions:
+
+- ใช้ Pino ผ่าน `nestjs-pino`; production เป็น single-line JSON และ development ใช้ `pino-pretty`
+- ส่ง operational logs ไป stdout เท่านั้น และไม่บันทึก request/response body
+- HTTP logger เป็นเจ้าของ terminal request log ส่วน Global Exception Filter ทำ response mapping และส่ง safe error metadata
+- Operational logs และ business audit logs ยังคงเป็นคนละ concern
+
+ผลการตรวจสอบ:
+
+- Formatter/Diff check: passed
+- Monorepo lint: 4 packages passed
+- Monorepo typecheck: 4 packages passed
+- API tests: 9 suites, 48 tests passed
+- Integration tests: HTTP `2xx`, `400`, `404`, `409`, `500`, request ID correlation, redaction, health suppression และ duplicate-log checks passed
+- Production build: API และ Web passed
+- Runtime verification: JSON terminal log, request ID correlation, lifecycle start/stop logs และการปิด raw SQL logs ผ่าน
+- Local runtime: Node.js 25.9.0
+
+ไฟล์หรือเอกสารสำคัญ:
+
+- `apps/api/src/config/logging.config.ts`
+- `apps/api/src/shared/logging/`
+- `apps/api/src/shared/http/errors/global-exception.filter.ts`
+- `docs/03-decisions/0004-structured-logging.md`
+- `docs/04-development/structured-logging-implementation-plan.md`
+- `docs/04-guides/local-development.md`
+
+สิ่งที่ยังไม่ครอบคลุมและความเสี่ยงคงเหลือ:
+
+- GitHub Actions CI ของ implementation branch ยังไม่ผ่าน จึงยังไม่มีหลักฐานกับ Node.js 22 สำหรับ change set นี้
+- Centralized log collection, retention, access control, metrics, tracing และ alerting อยู่นอกขอบเขต
+- Business audit-log persistence ต้องออกแบบแยกจาก operational logs
+
+งานถัดไป:
+
+- Push implementation branch และยืนยัน GitHub Actions CI
+- ตัดสินใจ Authentication และ Session Strategy พร้อม ADR
+- เพิ่ม OpenAPI ก่อนเริ่ม domain endpoints
+
 ## Blocked Items
 
 ยังไม่มีรายการที่บันทึก
 
 ## Next Recommended Tasks
 
-1. วางแผน Structured Logging และ HTTP Request Observability
-2. ตัดสินใจ Authentication และ Session Strategy พร้อม ADR
-3. เพิ่ม OpenAPI ก่อนเริ่มขยาย domain endpoints
-4. ออกแบบ Initial Database Schema และ Migration Plan
-5. เริ่ม User/Authentication module ก่อน Asset workflows ที่ต้องใช้ actor และ permission
+1. ตัดสินใจ Authentication และ Session Strategy พร้อม ADR
+2. เพิ่ม OpenAPI ก่อนเริ่มขยาย domain endpoints
+3. ออกแบบ Initial Database Schema และ Migration Plan
+4. เริ่ม User/Authentication module ก่อน Asset workflows ที่ต้องใช้ actor และ permission
+5. กำหนด test pyramid และ coverage expectations
 
 ## Update Template
 

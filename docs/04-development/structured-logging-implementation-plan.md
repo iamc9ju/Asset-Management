@@ -1,7 +1,7 @@
 # Structured Logging และ HTTP Request Observability — Implementation Plan
 
-- สถานะเอกสาร: Approved — implementation pending
-- อัปเดตล่าสุด: 2026-09-08
+- สถานะเอกสาร: Implemented — local verification complete, CI pending
+- อัปเดตล่าสุด: 2026-09-13
 - ขอบเขต: `apps/api`
 - ผู้ตัดสินใจ: Project owner
 - Decision: ใช้ Pino ผ่าน `nestjs-pino`
@@ -35,9 +35,9 @@
 - การเขียน log ลงไฟล์, database หรือ remote transport จาก application process
 - การเปลี่ยน error envelope หรือ HTTP API behavior
 
-## 3. Current State
+## 3. Baseline ก่อน Implementation
 
-Backend ปัจจุบันมี:
+ก่อน implementation Backend มี:
 
 - NestJS 11 และ Express adapter
 - `X-Request-ID` middleware ที่รับ UUID จาก client หรือสร้าง UUID ใหม่
@@ -50,7 +50,7 @@ Backend ปัจจุบันมี:
 - Zod environment validation ตอน startup
 - Jest unit/integration tests
 
-ช่องว่างปัจจุบัน:
+ช่องว่างที่แผนนี้ใช้แก้:
 
 - ไม่มี HTTP completion log สำหรับ successful requests และ `4xx`
 - ไม่มี duration, normalized route หรือ status-based level policy กลาง
@@ -391,37 +391,43 @@ Pino ระบุว่า request body logging ถูกปิดโดยป�
 - environment defaults ต้องคำนวณจาก `NODE_ENV` ใน config factory ไม่กระจายใน business logic
 - อัปเดต `.env.example` โดยไม่มี secrets
 
-## 15. Planned Files
+## 15. Implemented Files
 
-### ไฟล์ที่จะสร้าง
+### ไฟล์ที่สร้าง
 
 ```text
 apps/api/src/config/logging.config.ts
+apps/api/src/config/logging.config.spec.ts
+apps/api/src/config/environment.schema.spec.ts
+apps/api/src/shared/logging/application-lifecycle.logger.ts
+apps/api/src/shared/logging/application-lifecycle.logger.spec.ts
 apps/api/src/shared/logging/log-event.constants.ts
 apps/api/src/shared/logging/logging.module.ts
 apps/api/src/shared/logging/logging.types.ts
+apps/api/src/shared/logging/http-log.policy.ts
+apps/api/src/shared/logging/http-log.policy.spec.ts
 apps/api/src/shared/logging/http-log.serializer.ts
 apps/api/src/shared/logging/http-log.serializer.spec.ts
 apps/api/src/shared/logging/log-redaction.constants.ts
 apps/api/src/shared/logging/logging.integration.spec.ts
-docs/03-decisions/0004-structured-logging.md
 ```
 
-ชื่อไฟล์จริงสามารถปรับหลัง spike กับ API ของ `nestjs-pino` แต่ module boundary และความรับผิดชอบต้องคงตามแผน
+ADR-0004 ถูกสร้างและ merge ก่อนเริ่ม implementation branch นี้
 
-### ไฟล์ที่จะแก้
+### ไฟล์ที่แก้
 
 ```text
 .env.example
+package.json
 apps/api/package.json
 apps/api/src/app.module.ts
+apps/api/src/config/database.config.ts
 apps/api/src/config/environment.schema.ts
 apps/api/src/main.ts
 apps/api/src/shared/http/errors/global-exception.filter.ts
-apps/api/src/shared/http/request-id/request-id.middleware.ts
-apps/api/src/shared/http/request-id/request-id.types.ts
-apps/api/src/shared/http/request-id/request-id.middleware.spec.ts
 docs/04-development/project-development-checklist.md
+docs/04-development/structured-logging-implementation-plan.md
+docs/04-guides/local-development.md
 pnpm-lock.yaml
 ```
 
@@ -444,7 +450,7 @@ pnpm-lock.yaml
 4. เพิ่ม centralized event names, types, serializers และ redaction paths
 5. เชื่อม `LoggerModule` เป็น global logging infrastructure
 6. เปิด bootstrap buffering แล้วแทน Nest system logger หลัง DI พร้อม
-7. รวม request ID resolver ให้เป็น source of truth เดียว
+7. คง Request ID middleware เป็น source of truth และให้ HTTP logger ใช้ `request.requestId`
 8. เชื่อม request context กับ logger และ response header
 9. ย้าย HTTP error logging ownership ออกจาก Global Exception Filter เพื่อตัด duplicate log
 10. เพิ่ม safe error metadata ให้ terminal HTTP log
@@ -534,21 +540,21 @@ pnpm-lock.yaml
 ## 22. Definition of Done
 
 - [x] เจ้าของโปรเจกต์อนุมัติ Pino + `nestjs-pino`
-- [ ] ADR-0004 ถูกสร้างและ merge
-- [ ] Dependencies compatible กับ NestJS 11 และ Node.js 22
-- [ ] Logging environment variables มี startup validation
-- [ ] Production logs เป็น valid single-line JSON
-- [ ] Development logs อ่านง่ายตาม decision
-- [ ] ทุก HTTP terminal log มี request ID, method, route, status และ duration
-- [ ] Error logs มี stable error code
-- [ ] Header, body, query string, SQL, stack และ secrets ไม่รั่วตาม policy
-- [ ] Successful health logs ถูก suppress ตาม config
-- [ ] ไม่มี duplicate terminal/error logs
-- [ ] Unit และ integration tests ผ่าน
-- [ ] Existing Backend tests ผ่านทั้งหมด
-- [ ] Lint, typecheck และ production build ผ่าน
-- [ ] Smoke tests ครบ `2xx`, `400`, `404`, `409`, `500`
-- [ ] Checklist และ operational documentation ถูกอัปเดต
+- [x] ADR-0004 ถูกสร้างและ merge
+- [ ] Dependencies compatible กับ NestJS 11 และ Node.js 22 — รอ CI ของ implementation branch; local ใช้ Node.js 25.9.0
+- [x] Logging environment variables มี startup validation
+- [x] Production logs เป็น valid single-line JSON
+- [x] Development logs อ่านง่ายตาม decision
+- [x] ทุก HTTP terminal log มี request ID, method, route, status และ duration
+- [x] Error logs มี stable error code
+- [x] Header, body, query string, SQL, stack และ secrets ไม่รั่วตาม policy
+- [x] Successful health logs ถูก suppress ตาม config
+- [x] ไม่มี duplicate terminal/error logs
+- [x] Unit และ integration tests ผ่าน
+- [x] Existing Backend tests ผ่านทั้งหมด
+- [x] Lint, typecheck และ production build ผ่าน
+- [x] HTTP verification ครบ `2xx`, `400`, `404`, `409`, `500`
+- [x] Checklist และ operational documentation ถูกอัปเดต
 - [ ] GitHub Actions CI ผ่านก่อน merge
 
 ## 23. Decision Summary

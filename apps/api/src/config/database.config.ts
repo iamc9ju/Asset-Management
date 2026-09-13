@@ -12,6 +12,6 @@ export function databaseConfig(config: ConfigService): TypeOrmModuleOptions {
     autoLoadEntities: true,
     synchronize: false,
     migrationsRun: false,
-    logging: config.get("NODE_ENV") === "development",
+    logging: false,
   };
 }
