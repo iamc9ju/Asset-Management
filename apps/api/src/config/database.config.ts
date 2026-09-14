@@ -4,11 +4,11 @@ import type { TypeOrmModuleOptions } from "@nestjs/typeorm";
 export function databaseConfig(config: ConfigService): TypeOrmModuleOptions {
   return {
     type: "postgres",
-    host: config.get("POSTGRES_HOST", "localhost"),
-    port: config.getOrThrow<number>("POSTGRES_PORT"),
-    database: config.get("POSTGRES_DB", "asset_management"),
-    username: config.get("POSTGRES_USER", "asset_app"),
-    password: config.get("POSTGRES_PASSWORD", "asset_dev_password"),
+    url: config.getOrThrow<string>("DATABASE_URL"),
+    poolSize: config.get<number>("DATABASE_POOL_SIZE", 10),
+    extra: {
+      enableChannelBinding: true,
+    },
     autoLoadEntities: true,
     synchronize: false,
     migrationsRun: false,

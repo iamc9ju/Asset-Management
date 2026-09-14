@@ -5,6 +5,7 @@
 - Node.js 22 LTS หรือใหม่กว่า
 - Corepack และ pnpm 10
 - Docker Engine พร้อม Docker Compose v2
+- Neon project และ development branch สำหรับฐานข้อมูล
 
 ## First run
 
@@ -16,7 +17,11 @@ pnpm infra:up
 pnpm dev
 ```
 
-ค่าใน `.env.example` ใช้ `localhost` สำหรับการรัน Web/API บนเครื่อง ส่วน Compose จะ override hostname ของ API ให้เป็น service name ภายใน network
+คัดลอก pooled Neon connection string ไปที่ `DATABASE_URL` และ direct connection string ของ branch เดียวกันไปที่ `DATABASE_URL_UNPOOLED` ใน `.env` ห้าม commit หรือส่ง connection string จริงผ่าน client-side environment variables ตัวแปรที่ขึ้นต้นด้วย `VITE_` หรือ source code
+
+สำหรับ `node-postgres` ให้ใช้ `sslmode=verify-full&channel_binding=require` ในทั้งสอง URLs เพื่อยืนยัน certificate hostname และเปิด channel binding อย่างชัดเจน
+
+`pnpm infra:up` เปิดเฉพาะ Redis และ SeaweedFS สำหรับ local development ส่วน PostgreSQL หลักใช้ Neon หากต้องการ local PostgreSQL สำหรับ isolated integration tests ให้ใช้ `pnpm infra:db:up`
 
 ## Endpoints
 
@@ -90,11 +95,22 @@ pnpm dlx shadcn@latest add dialog --cwd packages/ui
 
 ## Database migrations
 
-สร้าง migration หลังเพิ่ม TypeORM entity และตรวจ SQL ทุกครั้ง:
+API runtime ใช้ pooled Neon URL จาก `DATABASE_URL` ส่วน TypeORM CLI เลือก direct URL จาก `DATABASE_URL_UNPOOLED` ก่อน และ fallback ไปที่ `DATABASE_URL` เมื่อไม่ได้กำหนด direct URL
+
+ให้สร้าง Neon development/preview branch แยกจาก production ก่อนรัน migration หรือ rollback แล้วกำหนด connection strings ของ branch นั้นใน `.env`
+
+สำหรับ migration ที่ generate จาก TypeORM entities ให้ตรวจ SQL ทุกครั้งก่อนรัน ส่วน initial schema migration เป็น migration ที่เขียนจาก Architecture Baseline โดยตรง:
 
 ```bash
 pnpm --filter @asset-management/api migration:generate -- src/database/migrations/DescribeChange
 pnpm --filter @asset-management/api migration:run
 ```
 
-ห้ามเปิด `synchronize: true` เป็นทางลัด
+ตรวจ rollback เฉพาะ Neon development/preview branch ที่ไม่มีข้อมูลสำคัญ:
+
+```bash
+pnpm --filter @asset-management/api migration:revert
+pnpm --filter @asset-management/api migration:run
+```
+
+ห้ามเปิด `synchronize: true` เป็นทางลัด และห้ามใช้ pooled URL สำหรับงาน dump/restore หรือ migration ที่ต้องพึ่ง session-level behavior

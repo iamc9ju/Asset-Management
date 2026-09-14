@@ -18,26 +18,25 @@
 
 ## Current Focus
 
-### Structured Logging และ HTTP Request Observability
+### Initial Database Schema
 
-สถานะ: Implemented และ local verification ผ่าน; รอ GitHub Actions CI
+สถานะ: Schema, migration และ local/Neon verification ผ่าน; รอ merge
 
-- [x] ตรวจสอบ logging implementation และข้อกำหนดในระบบปัจจุบัน
-- [x] เปรียบเทียบ NestJS Logger, Pino และ Winston
-- [x] ตัดสินใจ logging architecture และบันทึก ADR หากมีผลระยะยาว
-- [x] กำหนด structured log schema
-- [x] กำหนด log levels และ event-name catalog
-- [x] กำหนด redaction policy สำหรับ headers, body, credentials และ PII
-- [x] ออกแบบ request lifecycle logging พร้อม `request_id`
-- [x] ออกแบบการเชื่อมต่อกับ Global Exception Filter
-- [x] กำหนด environment configuration และ startup validation
-- [x] วางแผน health-check log suppression หรือ sampling
-- [x] วางแผน unit และ integration tests
-- [x] Review และอนุมัติ implementation plan
-- [x] Implement ตามแผนที่อนุมัติ
-- [x] Formatter, tests, typecheck และ production build ผ่านใน local environment
-- [x] อัปเดต checklist และเอกสารที่เกี่ยวข้อง
-- [ ] GitHub Actions CI ผ่านสำหรับ implementation branch
+- [x] ทบทวน table specifications และ invariants ใน Architecture Baseline
+- [x] ทำให้ Authentication schema สอดคล้องกับ ADR-0005
+- [x] กำหนด Neon pooled runtime URL และ direct migration URL
+- [x] กำหนด creation order และ referential actions
+- [x] กำหนด named constraints, partial indexes และ query indexes
+- [x] สร้าง Initial Database Schema Implementation Plan
+- [x] สร้าง reversible TypeORM migration สำหรับ MVP schema
+- [x] รัน migration บน Neon development branch
+- [x] รัน migration revert และยืนยันว่า rollback สมบูรณ์
+- [x] รัน migration ซ้ำหลัง revert
+- [x] สร้าง critical database constraint integration test suite
+- [x] Critical database constraint integration tests ผ่านบน Neon development branch
+- [x] API tests, typecheck และ production build ผ่าน
+- [x] อัปเดตผล verification
+- [ ] Merge เข้าสู่ `main`
 
 ## Milestone Checklist
 
@@ -50,7 +49,7 @@
 - [x] บันทึก ADR สำหรับ Modular Monolith
 - [x] บันทึก ADR สำหรับ infrastructure baseline
 - [ ] Review requirements และ architecture ก่อนเริ่มแต่ละ domain module
-- [ ] จัดทำ ADR สำหรับ authentication และ session strategy
+- [x] จัดทำ ADR สำหรับ authentication และ session strategy
 - [x] จัดทำ ADR สำหรับ structured logging หากเลือก external logging framework
 - [ ] จัดทำ threat model ก่อนเปิดใช้งาน production
 
@@ -115,17 +114,17 @@
 - [x] เพิ่ม TypeORM CLI configuration
 - [x] เพิ่ม migration scripts
 - [ ] สร้าง shared persistence conventions และ base types ที่จำเป็น
-- [ ] สร้าง initial schema migration ตาม architecture baseline
-- [ ] ตั้งชื่อ constraints และ indexes ที่ต้อง map เป็น domain errors
-- [ ] เพิ่ม migration integration tests
+- [x] สร้าง initial schema migration ตาม architecture baseline
+- [x] ตั้งชื่อ constraints และ indexes ที่ต้อง map เป็น domain errors
+- [x] เพิ่ม migration integration tests
 - [ ] เพิ่ม seed strategy สำหรับ development และ test
 - [ ] เพิ่ม transaction-boundary conventions
 - [ ] เพิ่ม optimistic/pessimistic concurrency strategy ตาม use case
-- [ ] ทดสอบ migration run และ rollback บนฐานข้อมูลว่าง
+- [x] ทดสอบ migration run และ rollback บน Neon development branch
 
 ### 6. Authentication และ Authorization
 
-- [ ] สรุป authentication/session requirements
+- [x] สรุป authentication/session requirements
 - [ ] Implement user identity และ credential storage
 - [ ] Implement login, refresh, logout และ session revocation
 - [ ] ป้องกัน account enumeration และ token reuse
@@ -339,7 +338,7 @@
 
 ### 2026-09-13 — Structured Logging และ HTTP Request Observability
 
-สถานะ: Implemented และ local verification ผ่าน; รอ GitHub Actions CI
+สถานะ: เสร็จและตรวจสอบแล้ว
 
 เป้าหมายและขอบเขต:
 
@@ -376,6 +375,7 @@ Architecture/technical decisions:
 - Production build: API และ Web passed
 - Runtime verification: JSON terminal log, request ID correlation, lifecycle start/stop logs และการปิด raw SQL logs ผ่าน
 - Local runtime: Node.js 25.9.0
+- GitHub Actions CI: ผ่านบน Node.js 22 ก่อน merge
 
 ไฟล์หรือเอกสารสำคัญ:
 
@@ -388,15 +388,65 @@ Architecture/technical decisions:
 
 สิ่งที่ยังไม่ครอบคลุมและความเสี่ยงคงเหลือ:
 
-- GitHub Actions CI ของ implementation branch ยังไม่ผ่าน จึงยังไม่มีหลักฐานกับ Node.js 22 สำหรับ change set นี้
 - Centralized log collection, retention, access control, metrics, tracing และ alerting อยู่นอกขอบเขต
 - Business audit-log persistence ต้องออกแบบแยกจาก operational logs
 
 งานถัดไป:
 
-- Push implementation branch และยืนยัน GitHub Actions CI
-- ตัดสินใจ Authentication และ Session Strategy พร้อม ADR
+- Merge Initial Database Schema และ ADR-0005
 - เพิ่ม OpenAPI ก่อนเริ่ม domain endpoints
+
+### 2026-09-14 — Initial Database Schema และ Neon Integration
+
+สถานะ: เสร็จและตรวจสอบแล้ว
+
+เป้าหมายและขอบเขต:
+
+- สร้าง PostgreSQL schema เริ่มต้นสำหรับ MVP ตาม Architecture Baseline
+- ใช้ Neon pooled connection สำหรับ API runtime และ direct connection สำหรับ migration
+- ไม่รวม TypeORM entities, seed data หรือ domain repositories
+
+สิ่งที่ทำ:
+
+- สร้าง reversible TypeORM migration ครบ 24 application tables
+- เพิ่ม `citext`, `btree_gist`, named constraints, foreign keys, partial indexes และ query indexes
+- บังคับ refresh-token chain, assignment interval, scan idempotency และ cross-campaign integrity
+- เพิ่ม environment validation สำหรับ Neon URL, TLS และ channel binding
+- แยก pooled runtime URL กับ direct migration URL
+- เพิ่ม isolated-schema integration test ซึ่งไม่แตะ application tables ใน `public`
+- เพิ่ม retry สำหรับ Neon compute startup และแก้ connection cleanup ของ test suite
+
+ผลการตรวจสอบ:
+
+- Migration run: passed
+- Migration down/revert: passed
+- Migration rerun: passed
+- Critical database constraint integration tests: 6/6 passed
+- API test suite: passed
+- API typecheck: passed
+- API production build: passed
+
+ไฟล์สำคัญ:
+
+- `apps/api/src/database/migrations/1789236000000-CreateInitialSchema.ts`
+- `apps/api/src/database/migrations/initial-schema.integration.spec.ts`
+- `apps/api/src/config/database.config.ts`
+- `apps/api/src/config/typeorm-cli.config.ts`
+- `apps/api/src/config/environment.schema.ts`
+- `docs/04-development/initial-database-schema-implementation-plan.md`
+
+สิ่งที่ยังไม่ครอบคลุมและความเสี่ยงคงเหลือ:
+
+- TypeORM entities และ repositories จะสร้างตาม vertical slice
+- Permission/role seed catalog ยังไม่ได้กำหนด
+- Database integration test ยังไม่ได้เพิ่มใน GitHub Actions CI
+- ต้อง rotate Neon credential ที่เคยถูกส่งผ่าน conversation ก่อนใช้งาน production
+
+งานถัดไป:
+
+- Merge branch ปัจจุบันและตรวจ GitHub Actions CI
+- เพิ่ม OpenAPI foundation
+- จัดทำ Authentication Implementation Plan และ permission seed catalog
 
 ## Blocked Items
 
@@ -404,11 +454,11 @@ Architecture/technical decisions:
 
 ## Next Recommended Tasks
 
-1. ตัดสินใจ Authentication และ Session Strategy พร้อม ADR
+1. Merge Initial Database Schema และตรวจ GitHub Actions CI
 2. เพิ่ม OpenAPI ก่อนเริ่มขยาย domain endpoints
-3. ออกแบบ Initial Database Schema และ Migration Plan
-4. เริ่ม User/Authentication module ก่อน Asset workflows ที่ต้องใช้ actor และ permission
-5. กำหนด test pyramid และ coverage expectations
+3. จัดทำ Authentication Implementation Plan
+4. กำหนด permission/role seed catalog
+5. เริ่ม User/Authentication module ก่อน Asset workflows ที่ต้องใช้ actor และ permission
 
 ## Update Template
 

@@ -37,6 +37,17 @@ const redisUrlSchema = z
     { message: "must use redis:// or rediss://" },
   );
 
+const postgresUrlSchema = z
+  .string()
+  .url()
+  .refine(
+    (value) => {
+      const protocol = new URL(value).protocol;
+      return protocol === "postgres:" || protocol === "postgresql:";
+    },
+    { message: "must use postgres:// or postgresql://" },
+  );
+
 const booleanSchema = z
   .enum(["true", "false"])
   .transform((value) => value === "true");
@@ -54,22 +65,9 @@ export const environmentSchema = z
     LOG_PRETTY: booleanSchema.optional(),
     LOG_HEALTH_REQUESTS: booleanSchema.optional(),
 
-    POSTGRES_HOST: z.string().trim().min(1),
-    POSTGRES_PORT: portSchema.default(5432),
-    POSTGRES_DB: z.string().trim().min(1),
-    POSTGRES_USER: z.string().trim().min(1),
-    POSTGRES_PASSWORD: z.string().min(1),
-    PGSSLMODE: z
-      .enum([
-        "disable",
-        "allow",
-        "prefer",
-        "require",
-        "verify-ca",
-        "verify-full",
-        "no-verify",
-      ])
-      .optional(),
+    DATABASE_URL: postgresUrlSchema,
+    DATABASE_URL_UNPOOLED: postgresUrlSchema.optional(),
+    DATABASE_POOL_SIZE: z.coerce.number().int().min(1).max(20).default(10),
 
     REDIS_URL: redisUrlSchema,
 
@@ -89,6 +87,19 @@ export const environmentSchema = z
   })
   .passthrough() //ถ้ามี Environment อื่นที่เราไมไ่ด้ประกาศไว้ก็ยังไม่ต้องลบทิ้ง
   .superRefine((environment, context) => {
+    if (
+      environment.DATABASE_URL_UNPOOLED &&
+      new URL(environment.DATABASE_URL_UNPOOLED).hostname
+        .split(".")[0]
+        ?.endsWith("-pooler")
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["DATABASE_URL_UNPOOLED"],
+        message: "must use a direct Neon endpoint without the -pooler suffix",
+      });
+    }
+
     if (environment.NODE_ENV !== "production") {
       return;
     }
@@ -101,10 +112,45 @@ export const environmentSchema = z
       });
     }
 
-    const secrets = [
-      ["POSTGRES_PASSWORD", environment.POSTGRES_PASSWORD],
-      ["S3_SECRET_KEY", environment.S3_SECRET_KEY],
+    const databaseUrls = [
+      ["DATABASE_URL", environment.DATABASE_URL],
+      ["DATABASE_URL_UNPOOLED", environment.DATABASE_URL_UNPOOLED],
     ] as const;
+
+    for (const [key, value] of databaseUrls) {
+      if (!value) {
+        continue;
+      }
+
+      const url = new URL(value);
+      const sslMode = url.searchParams.get("sslmode");
+
+      if (!sslMode || !["require", "verify-ca", "verify-full"].includes(sslMode)) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [key],
+          message: "must require TLS in production",
+        });
+      }
+
+      if (url.searchParams.get("channel_binding") !== "require") {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [key],
+          message: "must require channel binding in production",
+        });
+      }
+
+      if (decodeURIComponent(url.password) === "change-me-in-local-env") {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [key],
+          message: "must not use the development placeholder in production",
+        });
+      }
+    }
+
+    const secrets = [["S3_SECRET_KEY", environment.S3_SECRET_KEY]] as const;
 
     for (const [key, value] of secrets) {
       if (value === "change-me-in-local-env") {
