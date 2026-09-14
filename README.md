@@ -5,7 +5,7 @@ Centralized Asset Management & Asset Audit System แบบ Modular Monolith
 ## Technology stack
 
 - Web: React, Vite, TypeScript, Tailwind CSS, shadcn/ui
-- API: NestJS, TypeORM, PostgreSQL
+- API: NestJS, TypeORM, Neon Postgres
 - Storage: SeaweedFS ผ่าน S3-compatible API
 - Cache: Redis
 - Tooling: pnpm workspace, Turborepo, Docker Compose
@@ -39,4 +39,3 @@ pnpm dev
 
 Web: `http://localhost:5173`  
 API health: `http://localhost:3000/api/v1/health`
-
