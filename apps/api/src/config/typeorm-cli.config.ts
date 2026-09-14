@@ -1,15 +1,25 @@
-import 'dotenv/config';
-import { DataSource } from 'typeorm';
+import "dotenv/config";
+import { DataSource } from "typeorm";
+
+const databaseUrl =
+  process.env.DATABASE_URL_UNPOOLED ?? process.env.DATABASE_URL;
+
+if (!databaseUrl) {
+  throw new Error(
+    "DATABASE_URL_UNPOOLED or DATABASE_URL must be configured for TypeORM CLI",
+  );
+}
 
 export default new DataSource({
-  type: 'postgres',
-  host: process.env.POSTGRES_HOST ?? 'localhost',
-  port: Number(process.env.POSTGRES_PORT ?? 5432),
-  database: process.env.POSTGRES_DB ?? 'asset_management',
-  username: process.env.POSTGRES_USER ?? 'asset_app',
-  password: process.env.POSTGRES_PASSWORD ?? 'asset_dev_password',
-  entities: ['src/**/*.entity.ts'],
-  migrations: ['src/database/migrations/*.ts'],
+  type: "postgres",
+  url: databaseUrl,
+  poolSize: 1,
+  extra: {
+    enableChannelBinding: true,
+  },
+  entities: ["src/**/*.entity.ts"],
+  migrations: ["src/database/migrations/*.ts"],
   synchronize: false,
+  migrationsRun: false,
+  logging: false,
 });
-
