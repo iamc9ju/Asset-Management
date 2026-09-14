@@ -2,6 +2,7 @@ name: asset-management
 
 services:
   postgres:
+    profiles: [local-db]
     image: postgres:16-alpine
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-asset_management}
@@ -82,14 +83,11 @@ services:
       dockerfile: apps/api/Dockerfile
     env_file: .env
     environment:
-      POSTGRES_HOST: postgres
       REDIS_HOST: redis
       S3_ENDPOINT: http://seaweed-s3:8333
     ports:
       - "${API_PORT:-3000}:3000"
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
       seaweed-s3:

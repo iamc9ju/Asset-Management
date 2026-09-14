@@ -13,7 +13,8 @@
     "test": "turbo test",
     "typecheck": "turbo typecheck",
     "format": "prettier --write .",
-    "infra:up": "docker compose up -d postgres redis seaweed-master seaweed-volume seaweed-filer seaweed-s3",
+    "infra:up": "docker compose up -d redis seaweed-master seaweed-volume seaweed-filer seaweed-s3",
+    "infra:db:up": "docker compose up -d postgres",
     "infra:down": "docker compose down",
     "docker:up": "docker compose --profile app up --build",
     "docker:down": "docker compose --profile app down"
@@ -24,4 +25,3 @@
     "typescript": "^5.9.2"
   }
 }
-
