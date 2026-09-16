@@ -3,6 +3,12 @@ import { environmentSchema, validateEnvironment } from "./environment.schema";
 const VALID_ENVIRONMENT = {
   NODE_ENV: "development",
   WEB_ORIGIN: "http://localhost:5173",
+  AUTH_JWT_ISSUER: "asset-management-api",
+  AUTH_JWT_AUDIENCE: "asset-management-web",
+  AUTH_JWT_CURRENT_KID: "v1",
+  AUTH_JWT_CURRENT_SECRET:
+    "test-signing-secret-with-at-least-256-bits-of-entropy-value",
+  AUTH_REFRESH_COOKIE_SECURE: "true",
   DATABASE_URL:
     "postgresql://database-user:secure-database-password@example.neon.tech/database?sslmode=verify-full&channel_binding=require",
   REDIS_URL: "redis://localhost:6379",
@@ -37,6 +43,58 @@ describe("environmentSchema", () => {
 
     expect(result.DATABASE_POOL_SIZE).toBe(5);
     expect(result.DATABASE_URL_UNPOOLED).toContain("postgresql://");
+  });
+
+  it("parses authentication defaults", () => {
+    const result = environmentSchema.parse({
+      ...VALID_ENVIRONMENT,
+      AUTH_REFRESH_COOKIE_SECURE: "false",
+    });
+
+    expect(result.AUTH_ACCESS_TOKEN_TTL_SECONDS).toBe(900);
+    expect(result.AUTH_SESSION_IDLE_TTL_SECONDS).toBe(604_800);
+    expect(result.AUTH_SESSION_ABSOLUTE_TTL_SECONDS).toBe(2_592_000);
+    expect(result.AUTH_LOGIN_RATE_LIMIT).toBe(10);
+    expect(result.AUTH_REFRESH_RATE_LIMIT).toBe(60);
+    expect(result.AUTH_REFRESH_COOKIE_SECURE).toBe(false);
+  });
+
+  it("rejects a short JWT signing secret", () => {
+    expect(() =>
+      validateEnvironment({
+        ...VALID_ENVIRONMENT,
+        AUTH_JWT_CURRENT_SECRET: "too-short",
+      }),
+    ).toThrow(/Environment validation failed: AUTH_JWT_CURRENT_SECRET:/);
+  });
+
+  it("requires previous JWT key values as a pair", () => {
+    expect(() =>
+      validateEnvironment({
+        ...VALID_ENVIRONMENT,
+        AUTH_JWT_PREVIOUS_KID: "v0",
+      }),
+    ).toThrow(/AUTH_JWT_PREVIOUS_SECRET:/);
+  });
+
+  it("rejects session idle TTL longer than absolute TTL", () => {
+    expect(() =>
+      validateEnvironment({
+        ...VALID_ENVIRONMENT,
+        AUTH_SESSION_IDLE_TTL_SECONDS: "3600",
+        AUTH_SESSION_ABSOLUTE_TTL_SECONDS: "1800",
+      }),
+    ).toThrow(/AUTH_SESSION_IDLE_TTL_SECONDS:/);
+  });
+
+  it("requires secure refresh cookies in production", () => {
+    expect(() =>
+      validateEnvironment({
+        ...VALID_ENVIRONMENT,
+        NODE_ENV: "production",
+        AUTH_REFRESH_COOKIE_SECURE: "false",
+      }),
+    ).toThrow(/AUTH_REFRESH_COOKIE_SECURE: must be true in production/);
   });
 
   it("rejects a non-PostgreSQL database URL", () => {
