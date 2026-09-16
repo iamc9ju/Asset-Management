@@ -59,6 +59,36 @@ describe("environmentSchema", () => {
     expect(result.AUTH_REFRESH_COOKIE_SECURE).toBe(false);
   });
 
+  it("disables OpenAPI endpoints by default", () => {
+    const result = environmentSchema.parse(VALID_ENVIRONMENT);
+
+    expect(result.OPENAPI_ENABLED).toBe(false);
+    expect(result.OPENAPI_UI_ENABLED).toBe(false);
+  });
+
+  it("parses explicitly enabled OpenAPI endpoints", () => {
+    const result = environmentSchema.parse({
+      ...VALID_ENVIRONMENT,
+      OPENAPI_ENABLED: "true",
+      OPENAPI_UI_ENABLED: "true",
+    });
+
+    expect(result.OPENAPI_ENABLED).toBe(true);
+    expect(result.OPENAPI_UI_ENABLED).toBe(true);
+  });
+
+  it("rejects an enabled OpenAPI UI when OpenAPI is disabled", () => {
+    expect(() =>
+      validateEnvironment({
+        ...VALID_ENVIRONMENT,
+        OPENAPI_ENABLED: "false",
+        OPENAPI_UI_ENABLED: "true",
+      }),
+    ).toThrow(
+      /Environment validation failed: OPENAPI_UI_ENABLED: cannot be true when OPENAPI_ENABLED is false/,
+    );
+  });
+
   it("rejects a short JWT signing secret", () => {
     expect(() =>
       validateEnvironment({

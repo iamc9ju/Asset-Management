@@ -20,7 +20,7 @@
 
 ### OpenAPI Foundation และ Authentication Phase 3
 
-สถานะ: Authentication Phase 1–2 เสร็จและตรวจสอบแล้ว; เตรียม OpenAPI foundation ก่อนเริ่ม Login
+สถานะ: Authentication Phase 1–2 และ OpenAPI foundation เสร็จและตรวจสอบแล้ว; ขั้นถัดไปเริ่ม Login
 
 - [x] Merge Initial Database Schema เข้าสู่ `main`
 - [x] เพิ่ม Authentication configuration และ cryptography foundation
@@ -32,7 +32,7 @@
 - [x] ตรวจ repeated seed, custom-role preservation และ reserved-code collision
 - [x] ตรวจ permission-version increment เมื่อ effective grants เปลี่ยน
 - [x] API tests, typecheck และ production build ผ่าน
-- [ ] เพิ่ม OpenAPI/Swagger foundation
+- [x] เพิ่ม OpenAPI/Swagger foundation
 - [ ] เริ่ม Authentication Phase 3 — Login
 
 ## Milestone Checklist
@@ -100,7 +100,7 @@
 - [x] ใส่ `request_id` ในทุก error response
 - [x] เพิ่ม tests สำหรับ `400`, `404`, `409` และ `500`
 - [x] เพิ่ม structured logging และ request observability
-- [ ] เพิ่ม OpenAPI/Swagger generation
+- [x] เพิ่ม OpenAPI/Swagger generation
 - [ ] กำหนด API versioning และ deprecation policy
 - [ ] เพิ่ม rate limiting
 - [ ] เพิ่ม idempotency middleware/guard สำหรับ mutation ที่ retry ได้
@@ -521,16 +521,54 @@ Architecture/technical decisions:
 - เพิ่ม OpenAPI foundation
 - เริ่ม Authentication Phase 3 — Login
 
+### 2026-09-16 — OpenAPI/Swagger Foundation
+
+สถานะ: เสร็จและตรวจสอบแล้ว
+
+สิ่งที่ทำ:
+
+- เพิ่ม NestJS OpenAPI document generation และ Swagger UI แบบเปิดใช้ผ่าน typed environment configuration
+- แยก OpenAPI JSON endpoint ออกจาก Swagger UI เพื่อให้ production deployment ปิด UI ได้อิสระ
+- รวม global API prefix, OpenAPI routes และ bearer security scheme ไว้ใน typed constants
+- เพิ่ม explicit OpenAPI decorators และ response DTOs ให้ Health endpoints
+- เพิ่ม unit/integration tests และ `test:openapi` script
+- บันทึก endpoint, decorator และ deployment conventions ใน API documentation
+
+ผลการตรวจสอบ:
+
+- Typecheck: `pnpm --filter @asset-management/api typecheck` ผ่าน
+- OpenAPI tests: `pnpm --filter @asset-management/api test:openapi` ผ่าน
+- Full API test suite: `pnpm --filter @asset-management/api test:all` ผ่าน
+- Production build: `pnpm --filter @asset-management/api build` ผ่าน
+- Diff validation: `git diff --check` ผ่าน
+- Runtime verification: Swagger UI ที่ `/api/docs` และ OpenAPI JSON ที่ `/api/docs/openapi.json` เปิดใช้งานได้
+
+ไฟล์หรือเอกสารสำคัญ:
+
+- `apps/api/src/config/openapi.config.ts`
+- `apps/api/src/shared/http/api-route.constants.ts`
+- `apps/api/src/shared/http/openapi/error-response.openapi.ts`
+- `apps/api/src/modules/health/health.openapi.ts`
+- `docs/05-api/README.md`
+
+สิ่งที่ยังไม่ครอบคลุมและความเสี่ยงคงเหลือ:
+
+- ต้องกำหนด production exposure policy ก่อนเปิด OpenAPI JSON หรือ Swagger UI ใน production
+- Authentication endpoints ต้องเพิ่ม request/response DTO metadata, bearer decorators และ standard error responses เมื่อ implement
+
+งานถัดไป:
+
+- เริ่ม Authentication Phase 3 — Login
+
 ## Blocked Items
 
 ยังไม่มีรายการที่บันทึก
 
 ## Next Recommended Tasks
 
-1. เพิ่ม OpenAPI foundation ก่อนเริ่ม Authentication endpoints
-2. เริ่ม Authentication Phase 3 — Login
-3. ทำ Authentication Phase 4 — Protected requests และ permission guards
-4. ทำ Authentication Phase 5 — Refresh-token rotation และ reuse detection
+1. เริ่ม Authentication Phase 3 — Login
+2. ทำ Authentication Phase 4 — Protected requests และ permission guards
+3. ทำ Authentication Phase 5 — Refresh-token rotation และ reuse detection
 
 ## Update Template
 

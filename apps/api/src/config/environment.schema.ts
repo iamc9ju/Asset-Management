@@ -66,6 +66,8 @@ export const environmentSchema = z
 
     API_PORT: portSchema.default(3000),
     WEB_ORIGIN: httpUrlSchema,
+    OPENAPI_ENABLED: booleanSchema.default(false),
+    OPENAPI_UI_ENABLED: booleanSchema.default(false),
 
     AUTH_JWT_ISSUER: z.string().trim().min(1),
     AUTH_JWT_AUDIENCE: z.string().trim().min(1),
@@ -114,6 +116,14 @@ export const environmentSchema = z
   })
   .passthrough() //ถ้ามี Environment อื่นที่เราไมไ่ด้ประกาศไว้ก็ยังไม่ต้องลบทิ้ง
   .superRefine((environment, context) => {
+    if (environment.OPENAPI_UI_ENABLED && !environment.OPENAPI_ENABLED) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["OPENAPI_UI_ENABLED"],
+        message: "cannot be true when OPENAPI_ENABLED is false",
+      });
+    }
+
     if (
       environment.DATABASE_URL_UNPOOLED &&
       new URL(environment.DATABASE_URL_UNPOOLED).hostname
@@ -135,9 +145,7 @@ export const environmentSchema = z
       context.addIssue({
         code: z.ZodIssueCode.custom,
         path: [
-          hasPreviousKid
-            ? "AUTH_JWT_PREVIOUS_SECRET"
-            : "AUTH_JWT_PREVIOUS_KID",
+          hasPreviousKid ? "AUTH_JWT_PREVIOUS_SECRET" : "AUTH_JWT_PREVIOUS_KID",
         ],
         message:
           "AUTH_JWT_PREVIOUS_KID and AUTH_JWT_PREVIOUS_SECRET must be configured together",
@@ -145,8 +153,7 @@ export const environmentSchema = z
     }
 
     if (
-      environment.AUTH_JWT_PREVIOUS_KID ===
-      environment.AUTH_JWT_CURRENT_KID
+      environment.AUTH_JWT_PREVIOUS_KID === environment.AUTH_JWT_CURRENT_KID
     ) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
@@ -221,7 +228,10 @@ export const environmentSchema = z
       const url = new URL(value);
       const sslMode = url.searchParams.get("sslmode");
 
-      if (!sslMode || !["require", "verify-ca", "verify-full"].includes(sslMode)) {
+      if (
+        !sslMode ||
+        !["require", "verify-ca", "verify-full"].includes(sslMode)
+      ) {
         context.addIssue({
           code: z.ZodIssueCode.custom,
           path: [key],
