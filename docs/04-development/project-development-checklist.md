@@ -2,7 +2,7 @@
 
 เอกสารนี้เป็น source of truth สำหรับติดตามสถานะการพัฒนาและประวัติงานที่เสร็จแล้ว โดยใช้ร่วมกับ Git history, requirements, architecture baseline และ ADRs
 
-- อัปเดตล่าสุด: 2026-09-13
+- อัปเดตล่าสุด: 2026-09-16
 - เขตเวลา: Asia/Bangkok
 - ขอบเขตปัจจุบัน: MVP
 
@@ -18,25 +18,22 @@
 
 ## Current Focus
 
-### Initial Database Schema
+### OpenAPI Foundation และ Authentication Phase 3
 
-สถานะ: Schema, migration และ local/Neon verification ผ่าน; รอ merge
+สถานะ: Authentication Phase 1–2 และ OpenAPI foundation เสร็จและตรวจสอบแล้ว; ขั้นถัดไปเริ่ม Login
 
-- [x] ทบทวน table specifications และ invariants ใน Architecture Baseline
-- [x] ทำให้ Authentication schema สอดคล้องกับ ADR-0005
-- [x] กำหนด Neon pooled runtime URL และ direct migration URL
-- [x] กำหนด creation order และ referential actions
-- [x] กำหนด named constraints, partial indexes และ query indexes
-- [x] สร้าง Initial Database Schema Implementation Plan
-- [x] สร้าง reversible TypeORM migration สำหรับ MVP schema
-- [x] รัน migration บน Neon development branch
-- [x] รัน migration revert และยืนยันว่า rollback สมบูรณ์
-- [x] รัน migration ซ้ำหลัง revert
-- [x] สร้าง critical database constraint integration test suite
-- [x] Critical database constraint integration tests ผ่านบน Neon development branch
+- [x] Merge Initial Database Schema เข้าสู่ `main`
+- [x] เพิ่ม Authentication configuration และ cryptography foundation
+- [x] เพิ่ม injectable clock สำหรับ token issuance และ verification
+- [x] Map IAM และ authentication TypeORM entities กับ initial schema
+- [x] เพิ่ม IAM authentication/authorization query repository
+- [x] กำหนด typed permission และ system-role catalog
+- [x] เพิ่ม transactional, idempotent permission/role seed
+- [x] ตรวจ repeated seed, custom-role preservation และ reserved-code collision
+- [x] ตรวจ permission-version increment เมื่อ effective grants เปลี่ยน
 - [x] API tests, typecheck และ production build ผ่าน
-- [x] อัปเดตผล verification
-- [ ] Merge เข้าสู่ `main`
+- [x] เพิ่ม OpenAPI/Swagger foundation
+- [ ] เริ่ม Authentication Phase 3 — Login
 
 ## Milestone Checklist
 
@@ -103,7 +100,7 @@
 - [x] ใส่ `request_id` ในทุก error response
 - [x] เพิ่ม tests สำหรับ `400`, `404`, `409` และ `500`
 - [x] เพิ่ม structured logging และ request observability
-- [ ] เพิ่ม OpenAPI/Swagger generation
+- [x] เพิ่ม OpenAPI/Swagger generation
 - [ ] กำหนด API versioning และ deprecation policy
 - [ ] เพิ่ม rate limiting
 - [ ] เพิ่ม idempotency middleware/guard สำหรับ mutation ที่ retry ได้
@@ -117,7 +114,7 @@
 - [x] สร้าง initial schema migration ตาม architecture baseline
 - [x] ตั้งชื่อ constraints และ indexes ที่ต้อง map เป็น domain errors
 - [x] เพิ่ม migration integration tests
-- [ ] เพิ่ม seed strategy สำหรับ development และ test
+- [ ] เพิ่ม seed strategy สำหรับ development และ test (permission/role catalog seed เสร็จแล้ว; bootstrap และ domain fixture strategy ยังไม่ครบ)
 - [ ] เพิ่ม transaction-boundary conventions
 - [ ] เพิ่ม optimistic/pessimistic concurrency strategy ตาม use case
 - [x] ทดสอบ migration run และ rollback บน Neon development branch
@@ -448,17 +445,130 @@ Architecture/technical decisions:
 - เพิ่ม OpenAPI foundation
 - จัดทำ Authentication Implementation Plan และ permission seed catalog
 
+### 2026-09-14 — Authentication Implementation Plan
+
+สถานะ: เสร็จ
+
+สิ่งที่ทำ:
+
+- กำหนดขอบเขต Authentication, server-side session และ permission-based authorization
+- กำหนด API contract สำหรับ login, refresh, logout, current user และ session revocation
+- กำหนด refresh-token rotation, reuse detection, cookie, Origin และ rate-limit controls
+- แบ่ง implementation เป็น 8 phases พร้อม verification matrix และ definition of done
+
+ไฟล์สำคัญ:
+
+- `docs/04-development/authentication-implementation-plan.md`
+
+งานถัดไป:
+
+- กำหนด permission/role seed catalog
+- เริ่ม Authentication Phase 1: configuration และ cryptography foundation
+
+### 2026-09-16 — Authentication Foundation Phases 1–2
+
+สถานะ: เสร็จและตรวจสอบแล้ว
+
+เป้าหมายและขอบเขต:
+
+- สร้าง configuration, cryptography, IAM persistence และ permission/role seed foundation ตาม ADR-0005
+- ยังไม่รวม Login, protected-request guards, refresh rotation, logout หรือ session-management endpoints
+
+สิ่งที่ทำ:
+
+- เพิ่มและตรวจ environment configuration สำหรับ JWT, session TTL, rate limits และ refresh cookie
+- เพิ่ม password hasher, JWT access-token service, opaque refresh-token service และ injectable clock
+- Map IAM และ authentication tables เป็น TypeORM entities
+- เพิ่ม query repository สำหรับ credential lookup และ current effective permissions
+- สร้าง typed permission/system-role catalog จากเอกสารที่อนุมัติ
+- เพิ่ม explicit seed command ที่ reconcile permissions, system roles และ grants ใน transaction เดียว
+- ป้องกัน reserved system-role code collision และรักษา custom roles กับ user-role assignments
+- เพิ่ม `users.permission_version` เมื่อ seed เปลี่ยน effective grants ของ role ที่มีผู้ใช้งาน
+
+Architecture/technical decisions:
+
+- Seed ไม่รันอัตโนมัติระหว่าง API startup
+- ใช้ transaction-scoped PostgreSQL advisory lock เพื่อ serialize catalog reconciliation
+- Permission rows ที่ออกจาก catalog ไม่ถูกลบอัตโนมัติ เพราะ custom roles อาจยังอ้างอิงอยู่
+- JWT issuance และ verification ใช้ clock port เดียวกันเพื่อให้ expiry behavior ทดสอบแบบ deterministic
+
+ผลการตรวจสอบ:
+
+- Formatter: Prettier ผ่านสำหรับไฟล์ที่เพิ่มหรือแก้ใน task นี้
+- Typecheck: `pnpm --filter @asset-management/api typecheck` ผ่าน
+- Typecheck, unit tests, seed tests, full test suite, production build และ `git diff --check` ผ่านหลัง bulk-seed optimization
+- Bulk seed integration suite บน Neon ใช้เวลาประมาณ 40 วินาที ลดจาก implementation แบบ per-row query ที่ใช้เวลาประมาณ 194 วินาที
+- Build: `pnpm --filter @asset-management/api build` ผ่าน
+- Seed behavior: clean seed, repeated seed, rollback, custom-role preservation, grant removal และ permission-version increment ผ่าน
+
+ไฟล์หรือเอกสารสำคัญ:
+
+- `apps/api/src/database/seeds/permission-role.catalog.ts`
+- `apps/api/src/database/seeds/seed-permissions-and-roles.ts`
+- `apps/api/src/modules/auth/infrastructure/crypto/jwt-access-token.service.ts`
+- `apps/api/src/modules/iam/infrastructure/typeorm/iam-auth-query.repository.ts`
+- `docs/04-development/permission-role-seed-catalog.md`
+
+สิ่งที่ยังไม่ครอบคลุมและความเสี่ยงคงเหลือ:
+
+- ยังไม่มี bootstrap administrator command
+- Authentication endpoints, session transaction services, guards และ rate limiting ยังไม่ implement
+- Integration tests ต้องใช้ `DATABASE_URL_UNPOOLED` ที่ชี้ direct development database endpoint
+- ใช้ `test:unit` สำหรับ fast feedback, `test:db` สำหรับ database integration และ `test:all` ก่อน merge
+
+งานถัดไป:
+
+- เพิ่ม OpenAPI foundation
+- เริ่ม Authentication Phase 3 — Login
+
+### 2026-09-16 — OpenAPI/Swagger Foundation
+
+สถานะ: เสร็จและตรวจสอบแล้ว
+
+สิ่งที่ทำ:
+
+- เพิ่ม NestJS OpenAPI document generation และ Swagger UI แบบเปิดใช้ผ่าน typed environment configuration
+- แยก OpenAPI JSON endpoint ออกจาก Swagger UI เพื่อให้ production deployment ปิด UI ได้อิสระ
+- รวม global API prefix, OpenAPI routes และ bearer security scheme ไว้ใน typed constants
+- เพิ่ม explicit OpenAPI decorators และ response DTOs ให้ Health endpoints
+- เพิ่ม unit/integration tests และ `test:openapi` script
+- บันทึก endpoint, decorator และ deployment conventions ใน API documentation
+
+ผลการตรวจสอบ:
+
+- Typecheck: `pnpm --filter @asset-management/api typecheck` ผ่าน
+- OpenAPI tests: `pnpm --filter @asset-management/api test:openapi` ผ่าน
+- Full API test suite: `pnpm --filter @asset-management/api test:all` ผ่าน
+- Production build: `pnpm --filter @asset-management/api build` ผ่าน
+- Diff validation: `git diff --check` ผ่าน
+- Runtime verification: Swagger UI ที่ `/api/docs` และ OpenAPI JSON ที่ `/api/docs/openapi.json` เปิดใช้งานได้
+
+ไฟล์หรือเอกสารสำคัญ:
+
+- `apps/api/src/config/openapi.config.ts`
+- `apps/api/src/shared/http/api-route.constants.ts`
+- `apps/api/src/shared/http/openapi/error-response.openapi.ts`
+- `apps/api/src/modules/health/health.openapi.ts`
+- `docs/05-api/README.md`
+
+สิ่งที่ยังไม่ครอบคลุมและความเสี่ยงคงเหลือ:
+
+- ต้องกำหนด production exposure policy ก่อนเปิด OpenAPI JSON หรือ Swagger UI ใน production
+- Authentication endpoints ต้องเพิ่ม request/response DTO metadata, bearer decorators และ standard error responses เมื่อ implement
+
+งานถัดไป:
+
+- เริ่ม Authentication Phase 3 — Login
+
 ## Blocked Items
 
 ยังไม่มีรายการที่บันทึก
 
 ## Next Recommended Tasks
 
-1. Merge Initial Database Schema และตรวจ GitHub Actions CI
-2. เพิ่ม OpenAPI ก่อนเริ่มขยาย domain endpoints
-3. จัดทำ Authentication Implementation Plan
-4. กำหนด permission/role seed catalog
-5. เริ่ม User/Authentication module ก่อน Asset workflows ที่ต้องใช้ actor และ permission
+1. เริ่ม Authentication Phase 3 — Login
+2. ทำ Authentication Phase 4 — Protected requests และ permission guards
+3. ทำ Authentication Phase 5 — Refresh-token rotation และ reuse detection
 
 ## Update Template
 

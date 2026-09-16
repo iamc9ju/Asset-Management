@@ -19,6 +19,7 @@ import {
 import { APP_ERROR_CODE, type AppErrorCode } from "../errors/app-error-code";
 import { AppError } from "../errors/app-error";
 import type { ErrorResponseEnvelope } from "../errors/error-response.types";
+import { API_GLOBAL_PREFIX } from "../http/api-route.constants";
 import { GlobalExceptionFilter } from "../http/errors/global-exception.filter";
 import { REQUEST_ID_HEADER } from "../http/request-id/request-id.constants";
 import { requestIdMiddleware } from "../http/request-id/request-id.middleware";
@@ -222,7 +223,7 @@ describe("Structured logging integration", () => {
     app.useLogger(false);
     app.use(requestIdMiddleware);
     app.useGlobalPipes(createValidationPipe());
-    app.setGlobalPrefix("api/v1");
+    app.setGlobalPrefix(API_GLOBAL_PREFIX);
 
     await app.listen(0, "127.0.0.1");
 

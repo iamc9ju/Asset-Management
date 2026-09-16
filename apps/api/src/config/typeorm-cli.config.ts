@@ -17,7 +17,7 @@ export default new DataSource({
   extra: {
     enableChannelBinding: true,
   },
-  entities: ["src/**/*.entity.ts"],
+  entities: ["src/**/*.orm-entity.ts", "src/**/*.entity.ts"],
   migrations: ["src/database/migrations/*.ts"],
   synchronize: false,
   migrationsRun: false,
