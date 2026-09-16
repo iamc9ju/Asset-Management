@@ -52,6 +52,12 @@ const booleanSchema = z
   .enum(["true", "false"])
   .transform((value) => value === "true");
 
+const positiveIntegerSchema = z.coerce.number().int().positive();
+
+const jwtSecretSchema = z
+  .string()
+  .min(43, "must contain at least 43 characters");
+
 export const environmentSchema = z
   .object({
     NODE_ENV: z
@@ -60,6 +66,29 @@ export const environmentSchema = z
 
     API_PORT: portSchema.default(3000),
     WEB_ORIGIN: httpUrlSchema,
+    OPENAPI_ENABLED: booleanSchema.default(false),
+    OPENAPI_UI_ENABLED: booleanSchema.default(false),
+
+    AUTH_JWT_ISSUER: z.string().trim().min(1),
+    AUTH_JWT_AUDIENCE: z.string().trim().min(1),
+    AUTH_JWT_CURRENT_KID: z.string().trim().min(1),
+    AUTH_JWT_CURRENT_SECRET: jwtSecretSchema,
+    AUTH_JWT_PREVIOUS_KID: z.string().trim().min(1).optional(),
+    AUTH_JWT_PREVIOUS_SECRET: jwtSecretSchema.optional(),
+    AUTH_ACCESS_TOKEN_TTL_SECONDS: positiveIntegerSchema
+      .max(3_600)
+      .default(900),
+    AUTH_SESSION_IDLE_TTL_SECONDS: positiveIntegerSchema
+      .max(7_776_000)
+      .default(604_800),
+    AUTH_SESSION_ABSOLUTE_TTL_SECONDS: positiveIntegerSchema
+      .max(31_536_000)
+      .default(2_592_000),
+    AUTH_LOGIN_RATE_LIMIT: positiveIntegerSchema.max(1_000).default(10),
+    AUTH_LOGIN_RATE_WINDOW_SECONDS: positiveIntegerSchema.default(900),
+    AUTH_REFRESH_RATE_LIMIT: positiveIntegerSchema.max(10_000).default(60),
+    AUTH_REFRESH_RATE_WINDOW_SECONDS: positiveIntegerSchema.default(60),
+    AUTH_REFRESH_COOKIE_SECURE: booleanSchema.default(false),
 
     LOG_LEVEL: logLevelSchema.optional(),
     LOG_PRETTY: booleanSchema.optional(),
@@ -87,6 +116,14 @@ export const environmentSchema = z
   })
   .passthrough() //ถ้ามี Environment อื่นที่เราไมไ่ด้ประกาศไว้ก็ยังไม่ต้องลบทิ้ง
   .superRefine((environment, context) => {
+    if (environment.OPENAPI_UI_ENABLED && !environment.OPENAPI_ENABLED) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["OPENAPI_UI_ENABLED"],
+        message: "cannot be true when OPENAPI_ENABLED is false",
+      });
+    }
+
     if (
       environment.DATABASE_URL_UNPOOLED &&
       new URL(environment.DATABASE_URL_UNPOOLED).hostname
@@ -100,6 +137,64 @@ export const environmentSchema = z
       });
     }
 
+    const hasPreviousKid = environment.AUTH_JWT_PREVIOUS_KID !== undefined;
+    const hasPreviousSecret =
+      environment.AUTH_JWT_PREVIOUS_SECRET !== undefined;
+
+    if (hasPreviousKid !== hasPreviousSecret) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: [
+          hasPreviousKid ? "AUTH_JWT_PREVIOUS_SECRET" : "AUTH_JWT_PREVIOUS_KID",
+        ],
+        message:
+          "AUTH_JWT_PREVIOUS_KID and AUTH_JWT_PREVIOUS_SECRET must be configured together",
+      });
+    }
+
+    if (
+      environment.AUTH_JWT_PREVIOUS_KID === environment.AUTH_JWT_CURRENT_KID
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["AUTH_JWT_PREVIOUS_KID"],
+        message: "must differ from AUTH_JWT_CURRENT_KID",
+      });
+    }
+
+    if (
+      environment.AUTH_JWT_PREVIOUS_SECRET ===
+      environment.AUTH_JWT_CURRENT_SECRET
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["AUTH_JWT_PREVIOUS_SECRET"],
+        message: "must differ from AUTH_JWT_CURRENT_SECRET",
+      });
+    }
+
+    if (
+      environment.AUTH_ACCESS_TOKEN_TTL_SECONDS >
+      environment.AUTH_SESSION_IDLE_TTL_SECONDS
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["AUTH_ACCESS_TOKEN_TTL_SECONDS"],
+        message: "must not exceed AUTH_SESSION_IDLE_TTL_SECONDS",
+      });
+    }
+
+    if (
+      environment.AUTH_SESSION_IDLE_TTL_SECONDS >
+      environment.AUTH_SESSION_ABSOLUTE_TTL_SECONDS
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["AUTH_SESSION_IDLE_TTL_SECONDS"],
+        message: "must not exceed AUTH_SESSION_ABSOLUTE_TTL_SECONDS",
+      });
+    }
+
     if (environment.NODE_ENV !== "production") {
       return;
     }
@@ -109,6 +204,14 @@ export const environmentSchema = z
         code: z.ZodIssueCode.custom,
         path: ["LOG_PRETTY"],
         message: "must be false in production",
+      });
+    }
+
+    if (environment.AUTH_REFRESH_COOKIE_SECURE !== true) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["AUTH_REFRESH_COOKIE_SECURE"],
+        message: "must be true in production",
       });
     }
 
@@ -125,7 +228,10 @@ export const environmentSchema = z
       const url = new URL(value);
       const sslMode = url.searchParams.get("sslmode");
 
-      if (!sslMode || !["require", "verify-ca", "verify-full"].includes(sslMode)) {
+      if (
+        !sslMode ||
+        !["require", "verify-ca", "verify-full"].includes(sslMode)
+      ) {
         context.addIssue({
           code: z.ZodIssueCode.custom,
           path: [key],

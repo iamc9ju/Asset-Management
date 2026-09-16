@@ -12,6 +12,7 @@ import { IsEmail, IsString, MinLength } from "class-validator";
 import { APP_ERROR_CODE } from "../../errors/app-error-code";
 import { AppError } from "../../errors/app-error";
 import type { ErrorResponseEnvelope } from "../../errors/error-response.types";
+import { API_GLOBAL_PREFIX } from "../api-route.constants";
 import { requestIdMiddleware } from "../request-id/request-id.middleware";
 import { createValidationPipe } from "../validation/validation.pipe";
 import { GlobalExceptionFilter } from "./global-exception.filter";
@@ -68,7 +69,7 @@ describe("GlobalExceptionFilter integration", () => {
     app.useLogger(false);
     app.use(requestIdMiddleware);
     app.useGlobalPipes(createValidationPipe());
-    app.setGlobalPrefix("api/v1");
+    app.setGlobalPrefix(API_GLOBAL_PREFIX);
 
     await app.listen(0, "127.0.0.1");
 

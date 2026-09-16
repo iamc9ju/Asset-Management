@@ -6,6 +6,8 @@ import { requestIdMiddleware } from "./shared/http/request-id/request-id.middlew
 import { createValidationPipe } from "./shared/http/validation/validation.pipe";
 import { Logger } from "nestjs-pino";
 import { ApplicationLifecycleLogger } from "./shared/logging/application-lifecycle.logger";
+import { configureOpenApi } from "./config/openapi.config";
+import { API_GLOBAL_PREFIX } from "./shared/http/api-route.constants";
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
@@ -22,13 +24,14 @@ async function bootstrap() {
   app.use(requestIdMiddleware);
   app.useGlobalPipes(createValidationPipe());
 
-  app.setGlobalPrefix("api/v1");
+  app.setGlobalPrefix(API_GLOBAL_PREFIX);
   app.enableCors({
     origin: webOrigin,
     credentials: true,
     exposedHeaders: [REQUEST_ID_HEADER],
   });
   app.enableShutdownHooks();
+  configureOpenApi(app, config);
 
   await app.listen(port, "0.0.0.0");
   lifecycleLogger.logStarted(port);
