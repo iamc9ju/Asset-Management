@@ -33,4 +33,10 @@ describe("Argon2PasswordHasher", () => {
       hasher.verify("not-an-argon2-hash", password),
     ).resolves.toBe(false);
   });
+
+  it("consumes Argon2 work for an unknown account without returning a hash", async () => {
+    await expect(
+      hasher.consumeVerificationCost(password),
+    ).resolves.toBeUndefined();
+  });
 });

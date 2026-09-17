@@ -23,4 +23,8 @@ export class Argon2PasswordHasher implements PasswordHasher {
       return false;
     }
   }
+
+  async consumeVerificationCost(password: string): Promise<void> {
+    await argon2.hash(password, ARGON2_OPTIONS);
+  }
 }

@@ -127,6 +127,19 @@ describe("environmentSchema", () => {
     ).toThrow(/AUTH_REFRESH_COOKIE_SECURE: must be true in production/);
   });
 
+  it("rejects the example JWT secret in production", () => {
+    expect(() =>
+      validateEnvironment({
+        ...VALID_ENVIRONMENT,
+        NODE_ENV: "production",
+        AUTH_JWT_CURRENT_SECRET:
+          "change-me-with-a-random-jwt-secret-of-at-least-256-bits",
+      }),
+    ).toThrow(
+      /AUTH_JWT_CURRENT_SECRET: must not use the development placeholder/,
+    );
+  });
+
   it("rejects a non-PostgreSQL database URL", () => {
     expect(() =>
       validateEnvironment({

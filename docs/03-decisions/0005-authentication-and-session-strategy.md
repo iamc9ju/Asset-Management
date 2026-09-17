@@ -65,13 +65,15 @@ Access token ใช้ยืนยัน user และ session เท่าน�
 - ถูก revoke เมื่อ logout, user ถูก disable, session หมดอายุ หรือพบ token reuse
 - ห้ามส่ง token ผ่าน URL และห้ามบันทึก token หรือ token hash ลง log
 
-สำหรับ Web application ให้ส่ง refresh token ผ่าน cookie ชื่อ `__Secure-am_refresh` ซึ่งมีคุณสมบัติ:
+สำหรับ Web application ให้ส่ง refresh token ผ่าน cookie ชื่อ `__Secure-am_refresh` ใน secure environment ซึ่งมีคุณสมบัติ:
 
 - `HttpOnly`
 - `Secure` ใน production
 - `SameSite=Lax`
 - จำกัด `Path=/api/v1/auth`
 - กำหนด `Max-Age` ไม่เกิน absolute expiration ของ session
+
+Local development ที่รันผ่าน HTTP ใช้ชื่อ `am_refresh` เพราะ cookie prefix `__Secure-` บังคับให้มี `Secure` attribute ตาม browser contract ชื่อ cookie ต้อถูก resolve จาก typed authentication configuration และห้ามกระจายเงื่อนไขนี้ไปตาม controller
 
 Access token ให้เก็บใน memory ของ frontend และไม่เก็บใน `localStorage` หรือ `sessionStorage`
 

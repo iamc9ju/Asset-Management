@@ -1,9 +1,9 @@
 # Authentication and Authorization Implementation Plan
 
-- Status: In progress — Phases 1–2 implemented and verified
-- Updated: 2026-09-16
+- Status: In progress — Phases 1–3 implemented and verified
+- Updated: 2026-09-17
 - Owner: API
-- Target branch: `feature/authentication-foundation`
+- Target branch: `feature/authentication-login`
 
 ## Authority and related documents
 
@@ -332,7 +332,7 @@ Changing a password, disabling a user, or handling a credential security event m
 
 ## Refresh cookie and browser controls
 
-Cookie name: `__Secure-am_refresh`
+Cookie name: `__Secure-am_refresh` เมื่อ `AUTH_REFRESH_COOKIE_SECURE=true`; local HTTP development ใช้ `am_refresh` เพื่อไม่ละเมิด browser contract ของ `__Secure-` prefix
 
 | Attribute  | Value                                     |
 | ---------- | ----------------------------------------- |
@@ -466,6 +466,8 @@ Status: Complete and verified, including bulk-seed reconciliation
 5. verify repeated seed runs and custom-role preservation
 
 ### Phase 3 — Login
+
+Status: Complete and verified on 2026-09-17
 
 1. implement generic credential verification
 2. create session and initial refresh token transactionally

@@ -37,4 +37,41 @@ Health endpoints ที่มีแล้ว:
 - `GET /api/v1/health`
 - `GET /api/v1/health/ready`
 
+## Authentication endpoints
+
+### `POST /api/v1/auth/login`
+
+Public endpoint สำหรับ email/password authentication:
+
+- normalize email ด้วย trim และ lowercase
+- ตอบ `401 AUTH_INVALID_CREDENTIALS` แบบเดียวกันเมื่อ email ไม่มี, password ผิด หรือ account ไม่ active
+- สร้าง server-side session, initial refresh token, `last_login_at` และ `LOGIN_SUCCEEDED` activity ใน transaction เดียว
+- ส่ง access token กลับใน `{ "data": ... }` envelope
+- ส่ง refresh token เฉพาะใน `HttpOnly`, `SameSite=Lax` cookie ที่ path `/api/v1/auth`
+- ใช้ `__Secure-am_refresh` เมื่อ secure cookie ถูกเปิด; local HTTP ใช้ `am_refresh`
+
+Request:
+
+```json
+{
+  "email": "user@example.com",
+  "password": "plaintext supplied over HTTPS",
+  "device_label": "Chrome on macOS"
+}
+```
+
+Response:
+
+```json
+{
+  "data": {
+    "access_token": "<jwt>",
+    "token_type": "Bearer",
+    "expires_in": 900
+  }
+}
+```
+
+Phase 3 ยังไม่รวม Redis login rate limiting; endpoint ยังไม่ควรเปิดสู่ production traffic จนกว่า security control ใน Authentication Phase 7 จะเสร็จและผ่านการตรวจสอบ
+
 Endpoint catalog และ error model ฉบับ baseline อยู่ใน [MVP Architecture](../02-architecture/mvp-architecture-baseline.md)
