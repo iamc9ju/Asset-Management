@@ -10,6 +10,13 @@ export const APP_ERROR_CODE = {
   SERVICE_UNAVAILABLE: "SERVICE_UNAVAILABLE",
   REQUEST_FAILED: "REQUEST_FAILED",
   INTERNAL_ERROR: "INTERNAL_ERROR",
+  AUTH_INVALID_CREDENTIALS: "AUTH_INVALID_CREDENTIALS",
+  AUTH_ACCESS_TOKEN_INVALID: "AUTH_ACCESS_TOKEN_INVALID",
+  AUTH_ACCESS_TOKEN_EXPIRED: "AUTH_ACCESS_TOKEN_EXPIRED",
+  AUTH_SESSION_INVALID: "AUTH_SESSION_INVALID",
+  AUTH_SESSION_EXPIRED: "AUTH_SESSION_EXPIRED",
+  AUTH_PERMISSION_DENIED: "AUTH_PERMISSION_DENIED",
+  AUTH_RATE_LIMITED: "AUTH_RATE_LIMITED",
 } as const;
 
 export type AppErrorCode = (typeof APP_ERROR_CODE)[keyof typeof APP_ERROR_CODE];
@@ -30,4 +37,18 @@ export const APP_ERROR_MESSAGE = {
     "The service is temporarily unavailable.",
   [APP_ERROR_CODE.REQUEST_FAILED]: "The request could not be completed.",
   [APP_ERROR_CODE.INTERNAL_ERROR]: "An unexpected error occurred.",
+  [APP_ERROR_CODE.AUTH_INVALID_CREDENTIALS]:
+    "The email or password is incorrect.",
+  [APP_ERROR_CODE.AUTH_ACCESS_TOKEN_INVALID]:
+    "The access token is invalid.",
+  [APP_ERROR_CODE.AUTH_ACCESS_TOKEN_EXPIRED]:
+    "The access token has expired.",
+  [APP_ERROR_CODE.AUTH_SESSION_INVALID]:
+    "The authentication session is invalid.",
+  [APP_ERROR_CODE.AUTH_SESSION_EXPIRED]:
+    "The authentication session has expired.",
+  [APP_ERROR_CODE.AUTH_PERMISSION_DENIED]:
+    "You do not have permission to perform this action.",
+  [APP_ERROR_CODE.AUTH_RATE_LIMITED]:
+    "Too many authentication attempts. Please try again later.",
 } as const satisfies Record<AppErrorCode, string>;

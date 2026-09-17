@@ -58,6 +58,9 @@ const jwtSecretSchema = z
   .string()
   .min(43, "must contain at least 43 characters");
 
+const DEVELOPMENT_JWT_SECRET =
+  "change-me-with-a-random-jwt-secret-of-at-least-256-bits";
+
 export const environmentSchema = z
   .object({
     NODE_ENV: z
@@ -256,10 +259,17 @@ export const environmentSchema = z
       }
     }
 
-    const secrets = [["S3_SECRET_KEY", environment.S3_SECRET_KEY]] as const;
+    const secrets = [
+      ["S3_SECRET_KEY", environment.S3_SECRET_KEY, "change-me-in-local-env"],
+      [
+        "AUTH_JWT_CURRENT_SECRET",
+        environment.AUTH_JWT_CURRENT_SECRET,
+        DEVELOPMENT_JWT_SECRET,
+      ],
+    ] as const;
 
-    for (const [key, value] of secrets) {
-      if (value === "change-me-in-local-env") {
+    for (const [key, value, placeholder] of secrets) {
+      if (value === placeholder) {
         context.addIssue({
           code: z.ZodIssueCode.custom,
           path: [key],
