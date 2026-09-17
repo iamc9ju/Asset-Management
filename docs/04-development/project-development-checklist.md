@@ -18,9 +18,9 @@
 
 ## Current Focus
 
-### OpenAPI Foundation และ Authentication Phase 3
+### Authentication Phase 4 — Protected Requests
 
-สถานะ: Authentication Phase 1–2 และ OpenAPI foundation เสร็จและตรวจสอบแล้ว; ขั้นถัดไปเริ่ม Login
+สถานะ: Authentication Phase 1–3 และ OpenAPI foundation เสร็จและตรวจสอบแล้ว; ขั้นถัดไปเริ่ม protected requests
 
 - [x] Merge Initial Database Schema เข้าสู่ `main`
 - [x] เพิ่ม Authentication configuration และ cryptography foundation
@@ -33,7 +33,8 @@
 - [x] ตรวจ permission-version increment เมื่อ effective grants เปลี่ยน
 - [x] API tests, typecheck และ production build ผ่าน
 - [x] เพิ่ม OpenAPI/Swagger foundation
-- [ ] เริ่ม Authentication Phase 3 — Login
+- [x] Authentication Phase 3 — Login
+- [ ] Authentication Phase 4 — Protected requests และ permission guards
 
 ## Milestone Checklist
 
@@ -560,15 +561,73 @@ Architecture/technical decisions:
 
 - เริ่ม Authentication Phase 3 — Login
 
+### 2026-09-17 — Authentication Phase 3 — Login
+
+สถานะ: เสร็จและตรวจสอบแล้ว
+
+เป้าหมายและขอบเขต:
+
+- เพิ่ม `POST /api/v1/auth/login` สำหรับ email/password authentication
+- ครอบคลุม credential verification, initial session, refresh cookie, access token และ login activity events
+- ยังไม่รวม access-token guard, `/auth/me`, refresh rotation, logout และ Redis rate limiting
+
+สิ่งที่ทำ:
+
+- Normalize email และใช้ generic `AUTH_INVALID_CREDENTIALS` สำหรับ unknown email, incorrect password และ non-active account
+- ทำ Argon2 dummy work เมื่อไม่พบ account เพื่อลด timing-based account enumeration
+- สร้าง session, initial hashed refresh token, `last_login_at` และ `LOGIN_SUCCEEDED` activity ใน database transaction เดียว
+- ตรวจ user status ซ้ำภายใน transaction เพื่อป้องกัน concurrent disable/login race
+- ออก short-lived JWT access token และ HttpOnly, SameSite=Lax refresh cookie
+- แยก cookie name เป็น `__Secure-am_refresh` ใน secure environment และ `am_refresh` สำหรับ local HTTP
+- เพิ่ม request/response DTO validation, OpenAPI metadata และ standard error mapping
+- เพิ่ม `test:auth` สำหรับ targeted authentication verification
+
+Architecture/technical decisions:
+
+- Auth application layer ใช้ IAM query port และไม่ query IAM entities จาก controller หรือ domain code
+- Login failure events เป็น anonymous actor; target user ID ถูกเก็บเฉพาะเมื่อ resolve ได้ และไม่เก็บ email/password
+- IP มาจาก Express trusted connection metadata; ยังไม่เชื่อ forwarded headers จนกว่าจะกำหนด trusted-proxy policy
+- ไม่มี schema migration ใหม่เพราะใช้ `users`, `auth_sessions`, `auth_refresh_tokens` และ `activity_logs` จาก initial schema
+
+ผลการตรวจสอบ:
+
+- Formatter: Prettier ผ่านสำหรับไฟล์ใน task
+- Typecheck: `pnpm --filter @asset-management/api typecheck` ผ่าน
+- Authentication tests: `pnpm --filter @asset-management/api test:auth` ผ่าน
+- Full API test suite: `pnpm --filter @asset-management/api test:all` ผ่าน
+- Production build: `pnpm --filter @asset-management/api build` ผ่าน
+- Diff validation: `git diff --check` ผ่าน
+- Database integration: session, refresh token, user update และ success activity เกิดแบบ atomic; failure rollback ผ่าน
+- Security behavior: active login, unknown identity, incorrect password, inactive/suspended user, concurrent account-state change และ sanitized failure activity ผ่าน
+
+ไฟล์หรือเอกสารสำคัญ:
+
+- `apps/api/src/modules/auth/application/services/login.service.ts`
+- `apps/api/src/modules/auth/infrastructure/typeorm/auth-session.repository.ts`
+- `apps/api/src/modules/auth/presentation/auth.controller.ts`
+- `apps/api/src/modules/auth/presentation/auth-cookie.service.ts`
+- `apps/api/src/modules/auth/presentation/dto/login.request.ts`
+- `docs/05-api/README.md`
+
+สิ่งที่ยังไม่ครอบคลุมและความเสี่ยงคงเหลือ:
+
+- Redis login rate limiting ยังอยู่ใน Phase 7; ห้ามเปิด login endpoint สู่ production traffic ก่อน security control นี้เสร็จ
+- ยังไม่มี bootstrap administrator command จึงยังไม่มี manual runtime login ด้วย production-like account fixture
+- Access-token enforcement, refresh rotation, logout และ session management ยังอยู่ใน Phase 4–6
+
+งานถัดไป:
+
+- Authentication Phase 4 — Protected requests และ permission guards
+
 ## Blocked Items
 
 ยังไม่มีรายการที่บันทึก
 
 ## Next Recommended Tasks
 
-1. เริ่ม Authentication Phase 3 — Login
-2. ทำ Authentication Phase 4 — Protected requests และ permission guards
-3. ทำ Authentication Phase 5 — Refresh-token rotation และ reuse detection
+1. ทำ Authentication Phase 4 — Protected requests และ permission guards
+2. ทำ Authentication Phase 5 — Refresh-token rotation และ reuse detection
+3. ทำ Authentication Phase 6 — Logout และ session management
 
 ## Update Template
 
