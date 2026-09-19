@@ -3,6 +3,11 @@ import { randomUUID } from "node:crypto";
 import { DataSource } from "typeorm";
 import { CreateInitialSchema1789236000000 } from "../migrations/1789236000000-CreateInitialSchema";
 import {
+  assertDirectTestDatabaseUrl,
+  initializeTestDataSource,
+  TEST_DATABASE_SUITE_TIMEOUT_MS,
+} from "../testing/test-database";
+import {
   PERMISSION_CODE,
   PERMISSION_ROLE_CATALOG,
   SYSTEM_ROLE_CODE,
@@ -15,10 +20,8 @@ import {
 
 const DATABASE_URL = process.env.DATABASE_URL_UNPOOLED;
 const describeWithDatabase = DATABASE_URL ? describe : describe.skip;
-const DATABASE_STARTUP_ATTEMPTS = 3;
-const DATABASE_STARTUP_RETRY_DELAY_MS = 1_000;
 
-jest.setTimeout(60_000);
+jest.setTimeout(TEST_DATABASE_SUITE_TIMEOUT_MS);
 
 interface CountRow {
   readonly count: number;
@@ -33,44 +36,6 @@ function quoteIdentifier(identifier: string): string {
   return `"${identifier.replaceAll('"', '""')}"`;
 }
 
-function isTransientDatabaseStartupError(error: unknown): boolean {
-  if (!(error instanceof Error)) {
-    return false;
-  }
-
-  const code = "code" in error ? String(error.code) : undefined;
-
-  return (
-    code === "57P01" ||
-    code === "57P02" ||
-    code === "57P03" ||
-    error.message.includes(
-      "terminating connection due to administrator command",
-    ) ||
-    error.message.includes("Connection terminated unexpectedly")
-  );
-}
-
-async function waitForDatabase(dataSource: DataSource): Promise<void> {
-  for (let attempt = 1; attempt <= DATABASE_STARTUP_ATTEMPTS; attempt += 1) {
-    try {
-      await dataSource.query("SELECT 1");
-      return;
-    } catch (error) {
-      if (
-        !isTransientDatabaseStartupError(error) ||
-        attempt === DATABASE_STARTUP_ATTEMPTS
-      ) {
-        throw error;
-      }
-
-      await new Promise((resolve) =>
-        setTimeout(resolve, DATABASE_STARTUP_RETRY_DELAY_MS),
-      );
-    }
-  }
-}
-
 describeWithDatabase("permission and system-role seed integration", () => {
   const schemaName = `test_permission_seed_${randomUUID().replaceAll("-", "_")}`;
   const quotedSchemaName = quoteIdentifier(schemaName);
@@ -81,34 +46,24 @@ describeWithDatabase("permission and system-role seed integration", () => {
   let migrationApplied = false;
 
   beforeAll(async () => {
-    if (!DATABASE_URL) {
-      throw new Error(
-        "DATABASE_URL_UNPOOLED must target a direct development database endpoint",
-      );
-    }
+    assertDirectTestDatabaseUrl(DATABASE_URL);
 
-    if (new URL(DATABASE_URL).hostname.split(".")[0]?.endsWith("-pooler")) {
-      throw new Error(
-        "DATABASE_URL_UNPOOLED must use a direct endpoint without the -pooler suffix",
-      );
-    }
-
-    dataSource = new DataSource({
-      type: "postgres",
-      url: DATABASE_URL,
-      poolSize: 2,
-      extra: {
-        enableChannelBinding: true,
-        keepAlive: true,
-        options: `-c search_path=${schemaName},public`,
-      },
-      connectTimeoutMS: 15_000,
-      synchronize: false,
-      logging: false,
-    });
-
-    await dataSource.initialize();
-    await waitForDatabase(dataSource);
+    dataSource = await initializeTestDataSource(
+      () =>
+        new DataSource({
+          type: "postgres",
+          url: DATABASE_URL,
+          poolSize: 2,
+          extra: {
+            enableChannelBinding: true,
+            keepAlive: true,
+            options: `-c search_path=${schemaName},public`,
+          },
+          connectTimeoutMS: 15_000,
+          synchronize: false,
+          logging: false,
+        }),
+    );
     await dataSource.query(
       "CREATE EXTENSION IF NOT EXISTS citext WITH SCHEMA public",
     );

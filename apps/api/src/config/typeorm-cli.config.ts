@@ -1,6 +1,8 @@
 import "dotenv/config";
 import { DataSource } from "typeorm";
 
+export const TYPEORM_CLI_MIGRATION_GLOB = "src/database/migrations/[0-9]*-*.ts";
+
 const databaseUrl =
   process.env.DATABASE_URL_UNPOOLED ?? process.env.DATABASE_URL;
 
@@ -18,7 +20,7 @@ export default new DataSource({
     enableChannelBinding: true,
   },
   entities: ["src/**/*.orm-entity.ts", "src/**/*.entity.ts"],
-  migrations: ["src/database/migrations/*.ts"],
+  migrations: [TYPEORM_CLI_MIGRATION_GLOB],
   synchronize: false,
   migrationsRun: false,
   logging: false,
