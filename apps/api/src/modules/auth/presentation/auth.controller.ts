@@ -10,23 +10,23 @@ import {
 import {
   ApiBadRequestResponse,
   ApiInternalServerErrorResponse,
-  ApiOkResponse,
   ApiOperation,
   ApiProduces,
   ApiTags,
   ApiUnauthorizedResponse,
 } from "@nestjs/swagger";
 import type { Response } from "express";
+import { API_ROUTE } from "../../../shared/http/api-route.constants";
+import { ApiDataResponseDocumentation } from "../../../shared/http/openapi/api-response.openapi";
 import { ErrorResponseEnvelopeOpenApi } from "../../../shared/http/openapi/error-response.openapi";
-import {
-  API_ROUTE,
-} from "../../../shared/http/api-route.constants";
 import type { RequestWithId } from "../../../shared/http/request-id/request-id.types";
+import { createApiDataResponse } from "../../../shared/http/responses/api-response.factory";
+import type { ApiDataResponse } from "../../../shared/http/responses/api-response.types";
 import { LoginService } from "../application/services/login.service";
 import { createLoginClientContext } from "./auth-request-context";
 import { AuthCookieService } from "./auth-cookie.service";
 import { LoginRequestDto } from "./dto/login.request";
-import { LoginResponseEnvelopeDto } from "./dto/login.response";
+import { LoginResponseDataDto } from "./dto/login.response";
 
 @ApiTags("Authentication")
 @ApiProduces("application/json")
@@ -44,8 +44,8 @@ export class AuthController {
     description:
       "Returns a short-lived access token and sets an HttpOnly refresh-token cookie.",
   })
-  @ApiOkResponse({
-    type: LoginResponseEnvelopeDto,
+  @ApiDataResponseDocumentation({
+    model: LoginResponseDataDto,
     headers: {
       "Set-Cookie": {
         description: "HttpOnly refresh-token cookie.",
@@ -64,7 +64,7 @@ export class AuthController {
     @Body() body: LoginRequestDto,
     @Req() request: RequestWithId,
     @Res({ passthrough: true }) response: Response,
-  ): Promise<LoginResponseEnvelopeDto> {
+  ): Promise<ApiDataResponse<LoginResponseDataDto>> {
     const result = await this.loginService.execute({
       email: body.email,
       password: body.password,
@@ -78,12 +78,10 @@ export class AuthController {
       result.refreshTokenExpiresAt,
     );
 
-    return {
-      data: {
-        access_token: result.accessToken,
-        token_type: result.tokenType,
-        expires_in: result.expiresIn,
-      },
-    };
+    return createApiDataResponse({
+      access_token: result.accessToken,
+      token_type: result.tokenType,
+      expires_in: result.expiresIn,
+    });
   }
 }

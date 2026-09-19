@@ -14,6 +14,7 @@ import { AppError } from "../../../shared/errors/app-error";
 import type { ErrorResponseEnvelope } from "../../../shared/errors/error-response.types";
 import { API_GLOBAL_PREFIX } from "../../../shared/http/api-route.constants";
 import { GlobalExceptionFilter } from "../../../shared/http/errors/global-exception.filter";
+import { REQUEST_ID_HEADER } from "../../../shared/http/request-id/request-id.constants";
 import { requestIdMiddleware } from "../../../shared/http/request-id/request-id.middleware";
 import { createValidationPipe } from "../../../shared/http/validation/validation.pipe";
 import { AuthController } from "./auth.controller";
@@ -88,6 +89,7 @@ describe("AuthController integration", () => {
     });
 
     expect(response.status).toBe(200);
+    expect(response.headers.get(REQUEST_ID_HEADER)).toEqual(expect.any(String));
     await expect(response.json()).resolves.toEqual({
       data: {
         access_token: "signed-access-token",
@@ -165,7 +167,27 @@ describe("AuthController integration", () => {
 
     expect(operation).toBeDefined();
     expect(operation?.requestBody).toBeDefined();
-    expect(operation?.responses["200"]).toBeDefined();
+    expect(operation?.responses["200"]).toMatchObject({
+      headers: {
+        [REQUEST_ID_HEADER]: {
+          schema: { type: "string", format: "uuid" },
+        },
+      },
+      content: {
+        "application/json": {
+          schema: {
+            type: "object",
+            additionalProperties: false,
+            required: ["data"],
+            properties: {
+              data: {
+                $ref: "#/components/schemas/LoginResponseDataDto",
+              },
+            },
+          },
+        },
+      },
+    });
     expect(operation?.responses["401"]).toBeDefined();
   });
 });

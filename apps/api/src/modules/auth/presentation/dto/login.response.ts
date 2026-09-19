@@ -20,8 +20,3 @@ export class LoginResponseDataDto {
   })
   expires_in!: number;
 }
-
-export class LoginResponseEnvelopeDto {
-  @ApiProperty({ type: LoginResponseDataDto })
-  data!: LoginResponseDataDto;
-}

@@ -475,6 +475,16 @@ Status: Complete and verified on 2026-09-17
 4. record sanitized login events
 5. test active, invalid, and inactive cases
 
+### Phase 3.1 — First-administrator bootstrap
+
+Status: Complete and verified on 2026-09-18
+
+1. accept administrator metadata from explicit command environment and password from standard input only
+2. require the seeded active `SYSTEM_ADMIN` system role
+3. create the first active user, role assignment, and sanitized activity event atomically
+4. serialize concurrent attempts and refuse silent privilege elevation or a second bootstrap administrator
+5. make repeated execution for the same normalized administrator email a credential-preserving no-op
+
 ### Phase 4 — Protected requests
 
 1. implement access-token guard

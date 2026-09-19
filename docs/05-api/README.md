@@ -7,10 +7,35 @@ API base path: `/api/v1`
 - ใช้ REST resource nouns และ explicit command endpoint สำหรับ state transition เช่น `/assets/:id/transfer`
 - mutation รองรับ request correlation; operation ที่ retry ได้ต้องมี idempotency key
 - validation และ authorization ทำที่ backend เสมอ
+- business success response ใช้ `{ "data": ... }`; paginated response เพิ่ม `meta`
 - error response ใช้ stable machine-readable `code`
 - OpenAPI generate จาก NestJS decorators โดยใช้ lazy document factory
 - OpenAPI endpoints ปิดโดยค่าเริ่มต้นและเปิดผ่าน `OPENAPI_ENABLED`
 - Swagger UI เปิดแยกผ่าน `OPENAPI_UI_ENABLED`
+
+## Response contracts
+
+Business API ใช้ response envelope ต่อไปนี้เป็นมาตรฐาน:
+
+- single resource: `{ "data": { ... } }`
+- non-paginated collection: `{ "data": [ ... ] }`
+- paginated collection: `{ "data": [ ... ], "meta": { "page", "limit", "total", "total_pages" } }`
+- error: `{ "error": { "code", "message", "details", "request_id" } }`
+- no content: HTTP `204` โดยไม่มี response body
+
+ทุก response มี `x-request-id` header ส่วน error response ต้องมี `error.request_id` ค่าเดียวกับ header ด้วย Success response ไม่เพิ่ม `success`, `status_code`, generic `message`, timestamp หรือ request ID ซ้ำใน body
+
+External JSON contract ใช้ `snake_case`; application code ภายในใช้ `camelCase` ได้ตาม TypeScript conventions ค่า collection ว่างต้องเป็น `[]` ไม่ใช่ `null` และ resource ที่ไม่มีต้องตอบ `404` แทน `{ "data": null }`
+
+Health/readiness, OpenAPI JSON, binary/file streaming และ `204 No Content` เป็นข้อยกเว้นที่ไม่ถูกครอบด้วย `data` envelope โดยต้องประกาศ contract ของตนเองอย่างชัดเจน
+
+Controller ต้องสร้าง envelope อย่างชัดเจนผ่าน shared response factory และประกาศ schema ผ่าน shared OpenAPI decorator ระบบไม่ใช้ global success-response interceptor เพราะ interceptor อัตโนมัติเสี่ยง wrap response ซ้ำและเปลี่ยน contract ของ health, no-content หรือ streaming endpoint โดยไม่ตั้งใจ
+
+Implementation foundation อยู่ใน:
+
+- `apps/api/src/shared/http/responses/api-response.types.ts`
+- `apps/api/src/shared/http/responses/api-response.factory.ts`
+- `apps/api/src/shared/http/openapi/api-response.openapi.ts`
 
 ## OpenAPI endpoints
 

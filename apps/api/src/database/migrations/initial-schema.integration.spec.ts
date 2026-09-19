@@ -1,15 +1,20 @@
 import "dotenv/config";
 import { randomUUID } from "node:crypto";
 import { DataSource, type QueryRunner } from "typeorm";
+import {
+  assertDirectTestDatabaseUrl,
+  initializeTestDataSource,
+  isTransientTestDatabaseError,
+  TEST_DATABASE_SUITE_TIMEOUT_MS,
+  waitForTestDatabase,
+} from "../testing/test-database";
 import { CreateInitialSchema1789236000000 } from "./1789236000000-CreateInitialSchema";
 
 const DATABASE_URL = process.env.DATABASE_URL_UNPOOLED;
 const describeWithDatabase = DATABASE_URL ? describe : describe.skip;
 const EXPECTED_TABLE_COUNT = 24;
-const DATABASE_STARTUP_ATTEMPTS = 3;
-const DATABASE_STARTUP_RETRY_DELAY_MS = 1_000;
 
-jest.setTimeout(60_000);
+jest.setTimeout(TEST_DATABASE_SUITE_TIMEOUT_MS);
 
 interface AssetFixture {
   assetId: string;
@@ -20,42 +25,6 @@ interface AssetFixture {
 
 function quoteIdentifier(identifier: string): string {
   return `"${identifier.replaceAll('"', '""')}"`;
-}
-
-function isTransientDatabaseStartupError(error: unknown): boolean {
-  if (!(error instanceof Error)) {
-    return false;
-  }
-
-  const code = "code" in error ? String(error.code) : undefined;
-
-  return (
-    code === "57P01" ||
-    code === "57P02" ||
-    code === "57P03" ||
-    error.message.includes("terminating connection due to administrator command") ||
-    error.message.includes("Connection terminated unexpectedly")
-  );
-}
-
-async function waitForDatabase(dataSource: DataSource): Promise<void> {
-  for (let attempt = 1; attempt <= DATABASE_STARTUP_ATTEMPTS; attempt += 1) {
-    try {
-      await dataSource.query("SELECT 1");
-      return;
-    } catch (error) {
-      if (
-        !isTransientDatabaseStartupError(error) ||
-        attempt === DATABASE_STARTUP_ATTEMPTS
-      ) {
-        throw error;
-      }
-
-      await new Promise((resolve) =>
-        setTimeout(resolve, DATABASE_STARTUP_RETRY_DELAY_MS),
-      );
-    }
-  }
 }
 
 describeWithDatabase("CreateInitialSchema migration integration", () => {
@@ -69,45 +38,35 @@ describeWithDatabase("CreateInitialSchema migration integration", () => {
   let migrationApplied = false;
 
   beforeAll(async () => {
-    if (!DATABASE_URL) {
-      throw new Error(
-        "DATABASE_URL_UNPOOLED must target a Neon development branch for migration integration tests",
-      );
-    }
+    assertDirectTestDatabaseUrl(DATABASE_URL);
 
-    if (new URL(DATABASE_URL).hostname.split(".")[0]?.endsWith("-pooler")) {
-      throw new Error(
-        "DATABASE_URL_UNPOOLED must use a direct Neon endpoint without the -pooler suffix",
-      );
-    }
-
-    dataSource = new DataSource({
-      type: "postgres",
-      url: DATABASE_URL,
-      poolSize: 1,
-      extra: {
-        enableChannelBinding: true,
-        keepAlive: true,
-      },
-      connectTimeoutMS: 15_000,
-      synchronize: false,
-      logging: false,
-    });
-
-    await dataSource.initialize();
-    await waitForDatabase(dataSource);
+    dataSource = await initializeTestDataSource(
+      () =>
+        new DataSource({
+          type: "postgres",
+          url: DATABASE_URL,
+          poolSize: 1,
+          extra: {
+            enableChannelBinding: true,
+            keepAlive: true,
+          },
+          connectTimeoutMS: 15_000,
+          synchronize: false,
+          logging: false,
+        }),
+    );
     queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
 
-    await queryRunner.query("CREATE EXTENSION IF NOT EXISTS citext WITH SCHEMA public");
+    await queryRunner.query(
+      "CREATE EXTENSION IF NOT EXISTS citext WITH SCHEMA public",
+    );
     await queryRunner.query(
       "CREATE EXTENSION IF NOT EXISTS btree_gist WITH SCHEMA public",
     );
     await queryRunner.query(`CREATE SCHEMA ${quotedSchemaName}`);
     schemaCreated = true;
-    await queryRunner.query(
-      `SET search_path TO ${quotedSchemaName}, public`,
-    );
+    await queryRunner.query(`SET search_path TO ${quotedSchemaName}, public`);
 
     await migration.up(queryRunner);
     migrationApplied = true;
@@ -159,7 +118,7 @@ describeWithDatabase("CreateInitialSchema migration integration", () => {
             `DROP SCHEMA IF EXISTS ${quotedSchemaName} CASCADE`,
           );
         } catch (error) {
-          if (!isTransientDatabaseStartupError(error)) {
+          if (!isTransientTestDatabaseError(error)) {
             throw error;
           }
 
@@ -167,7 +126,7 @@ describeWithDatabase("CreateInitialSchema migration integration", () => {
             await queryRunner.release();
           }
 
-          await waitForDatabase(dataSource);
+          await waitForTestDatabase(dataSource);
           await dataSource.query(
             `DROP SCHEMA IF EXISTS ${quotedSchemaName} CASCADE`,
           );
@@ -186,7 +145,9 @@ describeWithDatabase("CreateInitialSchema migration integration", () => {
     }
   });
 
-  async function insertUser(email = `${randomUUID()}@example.com`): Promise<string> {
+  async function insertUser(
+    email = `${randomUUID()}@example.com`,
+  ): Promise<string> {
     const userId = randomUUID();
 
     await queryRunner.query(
@@ -275,12 +236,7 @@ describeWithDatabase("CreateInitialSchema migration integration", () => {
           $4
         )
       `,
-      [
-        campaignId,
-        `CAMPAIGN-${randomUUID()}`,
-        "Integration Campaign",
-        userId,
-      ],
+      [campaignId, `CAMPAIGN-${randomUUID()}`, "Integration Campaign", userId],
     );
 
     return campaignId;

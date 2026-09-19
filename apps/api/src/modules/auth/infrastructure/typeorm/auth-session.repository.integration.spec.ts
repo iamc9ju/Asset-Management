@@ -2,6 +2,13 @@ import "dotenv/config";
 import { randomUUID } from "node:crypto";
 import { DataSource } from "typeorm";
 import { CreateInitialSchema1789236000000 } from "../../../../database/migrations/1789236000000-CreateInitialSchema";
+import {
+  assertDirectTestDatabaseUrl,
+  initializeTestDataSource,
+  isTransientTestDatabaseError,
+  TEST_DATABASE_SUITE_TIMEOUT_MS,
+  waitForTestDatabase,
+} from "../../../../database/testing/test-database";
 import { LOGIN_FAILURE_REASON } from "../../application/ports/auth-event.port";
 import { CREATE_LOGIN_SESSION_RESULT } from "../../application/ports/auth-session-repository.port";
 import { UserOrmEntity } from "../../../iam/infrastructure/typeorm/entities/user.orm-entity";
@@ -12,51 +19,11 @@ import { AuthSessionOrmEntity } from "./entities/auth-session.orm-entity";
 
 const DATABASE_URL = process.env.DATABASE_URL_UNPOOLED;
 const describeWithDatabase = DATABASE_URL ? describe : describe.skip;
-const DATABASE_STARTUP_ATTEMPTS = 3;
-const DATABASE_STARTUP_RETRY_DELAY_MS = 1_000;
 const NOW = new Date("2026-09-17T08:00:00.000Z");
 const IDLE_EXPIRES_AT = new Date("2026-09-24T08:00:00.000Z");
 const ABSOLUTE_EXPIRES_AT = new Date("2026-10-17T08:00:00.000Z");
 
-jest.setTimeout(90_000);
-
-function isTransientDatabaseStartupError(error: unknown): boolean {
-  if (!(error instanceof Error)) {
-    return false;
-  }
-
-  const code = "code" in error ? String(error.code) : undefined;
-
-  return (
-    code === "57P01" ||
-    code === "57P02" ||
-    code === "57P03" ||
-    error.message.includes(
-      "terminating connection due to administrator command",
-    ) ||
-    error.message.includes("Connection terminated unexpectedly")
-  );
-}
-
-async function waitForDatabase(dataSource: DataSource): Promise<void> {
-  for (let attempt = 1; attempt <= DATABASE_STARTUP_ATTEMPTS; attempt += 1) {
-    try {
-      await dataSource.query("SELECT 1");
-      return;
-    } catch (error) {
-      if (
-        !isTransientDatabaseStartupError(error) ||
-        attempt === DATABASE_STARTUP_ATTEMPTS
-      ) {
-        throw error;
-      }
-
-      await new Promise((resolve) =>
-        setTimeout(resolve, DATABASE_STARTUP_RETRY_DELAY_MS),
-      );
-    }
-  }
-}
+jest.setTimeout(TEST_DATABASE_SUITE_TIMEOUT_MS);
 
 describeWithDatabase("TypeOrmAuthSessionRepository integration", () => {
   const schemaName = `test_auth_login_${randomUUID().replaceAll("-", "_")}`;
@@ -69,63 +36,61 @@ describeWithDatabase("TypeOrmAuthSessionRepository integration", () => {
   let schemaCreated = false;
 
   beforeAll(async () => {
-    if (!DATABASE_URL) {
-      throw new Error(
-        "DATABASE_URL_UNPOOLED must target a direct development database endpoint",
+    assertDirectTestDatabaseUrl(DATABASE_URL);
+
+    const bootstrapDataSource = await initializeTestDataSource(
+      () =>
+        new DataSource({
+          type: "postgres",
+          url: DATABASE_URL,
+          poolSize: 1,
+          extra: {
+            enableChannelBinding: true,
+            keepAlive: true,
+          },
+          connectTimeoutMS: 15_000,
+          synchronize: false,
+          logging: false,
+        }),
+    );
+
+    try {
+      await bootstrapDataSource.query(
+        "CREATE EXTENSION IF NOT EXISTS citext WITH SCHEMA public",
       );
+      await bootstrapDataSource.query(
+        "CREATE EXTENSION IF NOT EXISTS btree_gist WITH SCHEMA public",
+      );
+      await bootstrapDataSource.query(`CREATE SCHEMA ${quotedSchemaName}`);
+      schemaCreated = true;
+    } finally {
+      if (bootstrapDataSource.isInitialized) {
+        await bootstrapDataSource.destroy();
+      }
     }
 
-    if (new URL(DATABASE_URL).hostname.split(".")[0]?.endsWith("-pooler")) {
-      throw new Error(
-        "DATABASE_URL_UNPOOLED must use a direct endpoint without the -pooler suffix",
-      );
-    }
-
-    const bootstrapDataSource = new DataSource({
-      type: "postgres",
-      url: DATABASE_URL,
-      poolSize: 1,
-      extra: {
-        enableChannelBinding: true,
-        keepAlive: true,
-      },
-      synchronize: false,
-      logging: false,
-    });
-
-    await bootstrapDataSource.initialize();
-    await waitForDatabase(bootstrapDataSource);
-    await bootstrapDataSource.query(
-      "CREATE EXTENSION IF NOT EXISTS citext WITH SCHEMA public",
+    dataSource = await initializeTestDataSource(
+      () =>
+        new DataSource({
+          type: "postgres",
+          url: DATABASE_URL,
+          schema: schemaName,
+          poolSize: 1,
+          extra: {
+            enableChannelBinding: true,
+            keepAlive: true,
+            options: `-c search_path=${schemaName},public`,
+          },
+          connectTimeoutMS: 15_000,
+          entities: [
+            UserOrmEntity,
+            AuthSessionOrmEntity,
+            AuthRefreshTokenOrmEntity,
+          ],
+          synchronize: false,
+          logging: false,
+        }),
     );
-    await bootstrapDataSource.query(
-      "CREATE EXTENSION IF NOT EXISTS btree_gist WITH SCHEMA public",
-    );
-    await bootstrapDataSource.query(`CREATE SCHEMA ${quotedSchemaName}`);
-    schemaCreated = true;
-    await bootstrapDataSource.destroy();
-
-    dataSource = new DataSource({
-      type: "postgres",
-      url: DATABASE_URL,
-      schema: schemaName,
-      poolSize: 1,
-      extra: {
-        enableChannelBinding: true,
-        keepAlive: true,
-        options: `-c search_path=${schemaName},public`,
-      },
-      entities: [
-        UserOrmEntity,
-        AuthSessionOrmEntity,
-        AuthRefreshTokenOrmEntity,
-      ],
-      synchronize: false,
-      logging: false,
-    });
-
-    await dataSource.initialize();
-    await waitForDatabase(dataSource);
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await migration.up(queryRunner);
@@ -150,7 +115,17 @@ describeWithDatabase("TypeOrmAuthSessionRepository integration", () => {
     if (dataSource?.isInitialized) {
       try {
         if (schemaCreated) {
-          await dataSource.query(`DROP SCHEMA ${quotedSchemaName} CASCADE`);
+          try {
+            await dataSource.query(`DROP SCHEMA ${quotedSchemaName} CASCADE`);
+          } catch (error) {
+            if (!isTransientTestDatabaseError(error)) {
+              throw error;
+            }
+
+            await waitForTestDatabase(dataSource);
+            await dataSource.query(`DROP SCHEMA ${quotedSchemaName} CASCADE`);
+          }
+
           schemaCreated = false;
         }
       } finally {

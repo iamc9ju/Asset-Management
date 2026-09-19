@@ -2,7 +2,7 @@
 
 เอกสารนี้เป็น source of truth สำหรับติดตามสถานะการพัฒนาและประวัติงานที่เสร็จแล้ว โดยใช้ร่วมกับ Git history, requirements, architecture baseline และ ADRs
 
-- อัปเดตล่าสุด: 2026-09-16
+- อัปเดตล่าสุด: 2026-09-18
 - เขตเวลา: Asia/Bangkok
 - ขอบเขตปัจจุบัน: MVP
 
@@ -20,7 +20,7 @@
 
 ### Authentication Phase 4 — Protected Requests
 
-สถานะ: Authentication Phase 1–3 และ OpenAPI foundation เสร็จและตรวจสอบแล้ว; ขั้นถัดไปเริ่ม protected requests
+สถานะ: Authentication Phase 1–3.1, OpenAPI foundation และ first-administrator bootstrap เสร็จและตรวจสอบแล้ว; ขั้นถัดไปเริ่ม protected requests
 
 - [x] Merge Initial Database Schema เข้าสู่ `main`
 - [x] เพิ่ม Authentication configuration และ cryptography foundation
@@ -34,6 +34,8 @@
 - [x] API tests, typecheck และ production build ผ่าน
 - [x] เพิ่ม OpenAPI/Swagger foundation
 - [x] Authentication Phase 3 — Login
+- [x] ตรวจ Bootstrap Administrator command, focused tests, full tests, typecheck, build และ manual login
+- [ ] ตรวจ standard API success/pagination response foundation และ OpenAPI contracts
 - [ ] Authentication Phase 4 — Protected requests และ permission guards
 
 ## Milestone Checklist
@@ -612,12 +614,57 @@ Architecture/technical decisions:
 สิ่งที่ยังไม่ครอบคลุมและความเสี่ยงคงเหลือ:
 
 - Redis login rate limiting ยังอยู่ใน Phase 7; ห้ามเปิด login endpoint สู่ production traffic ก่อน security control นี้เสร็จ
-- ยังไม่มี bootstrap administrator command จึงยังไม่มี manual runtime login ด้วย production-like account fixture
+- Bootstrap administrator ผ่านการตรวจแล้ว แต่ยังไม่มี administrator password-recovery workflow; หาก credential สูญหายต้องใช้ controlled operational procedure ที่จะออกแบบแยกต่างหาก
 - Access-token enforcement, refresh rotation, logout และ session management ยังอยู่ใน Phase 4–6
 
 งานถัดไป:
 
 - Authentication Phase 4 — Protected requests และ permission guards
+
+### 2026-09-18 — First-Administrator Bootstrap
+
+สถานะ: เสร็จและตรวจสอบแล้ว
+
+เป้าหมายและขอบเขต:
+
+- เพิ่ม explicit CLI command สำหรับสร้าง Administrator คนแรกโดยไม่เปิด public registration
+- ใช้ permission/role catalog เดิมและไม่สร้าง default credential
+- ครอบคลุม atomic persistence, concurrency, idempotency, audit และ manual Login verification
+
+สิ่งที่ทำ:
+
+- รับ email และ display name ผ่าน command-scoped environment variables และรับ password ผ่าน standard input เท่านั้น
+- Validate และ normalize input พร้อมบังคับ password ขั้นต่ำ 15 ตัวอักษร
+- Hash password ด้วย Argon2id policy เดียวกับ Login
+- สร้าง active user, `SYSTEM_ADMIN` assignment และ sanitized activity event ใน transaction เดียว
+- ใช้ PostgreSQL advisory transaction lock เพื่อ serialize concurrent bootstrap attempts
+- รันซ้ำด้วย normalized email เดิมเป็น no-op โดยไม่ reset password
+- ปฏิเสธการยกระดับ existing non-administrator และปฏิเสธการ bootstrap administrator คนที่สอง
+- จำกัด TypeORM CLI migration glob ให้โหลดเฉพาะ timestamped migration และไม่โหลด Jest spec
+- เพิ่ม focused unit/integration tests และ TypeORM CLI configuration regression test
+
+Architecture/technical decisions:
+
+- Command แยกจาก API startup, migration และ permission/role seed อย่างชัดเจน
+- Database เก็บ native UUID; command output แสดงเฉพาะ result status และ user ID
+- Activity event ใช้ system actor และไม่บันทึก email, password หรือ password hash
+- การเพิ่ม administrator หลัง bootstrap ต้องผ่าน authenticated role-assignment workflow ในอนาคต
+
+ผลการตรวจสอบ:
+
+- Bootstrap focused tests ผ่าน
+- Full API test suite และ production build ผ่าน
+- TypeORM CLI configuration regression test ผ่าน
+- Typecheck และ `git diff --check` ผ่าน
+- Permission/role seed รันผ่านจาก CLI หลังจำกัด migration glob
+- Bootstrap command สร้าง Administrator ใน development database สำเร็จ
+- Manual `POST /api/v1/auth/login` ผ่าน Swagger สำเร็จด้วยบัญชีที่ bootstrap
+
+สิ่งที่ยังไม่ครอบคลุมและความเสี่ยงคงเหลือ:
+
+- ยังไม่มี administrator password-recovery workflow
+- ยังไม่มี authenticated Create-User/Invite API และ role-assignment endpoint
+- Access-token guard, permission guard และ `GET /auth/me` อยู่ใน Authentication Phase 4
 
 ## Blocked Items
 
