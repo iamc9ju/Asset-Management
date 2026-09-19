@@ -277,7 +277,9 @@ A first administrator must be created through a separate, explicit bootstrap com
 - is idempotent by normalized email
 - is disabled or tightly controlled after initial provisioning
 
-This bootstrap command is a later IAM implementation task and is not part of the permission catalog seed.
+The command is implemented separately in `apps/api/src/database/bootstrap/` and is invoked with `pnpm --filter @asset-management/api bootstrap:administrator` only after this catalog seed succeeds. It is not part of API startup or permission-catalog reconciliation.
+
+Password input is accepted only through standard input. The command serializes concurrent attempts with a PostgreSQL advisory transaction lock, creates the user, role assignment, and sanitized activity event atomically, and refuses to elevate an existing non-administrator account. Repeating the command for the same normalized administrator email is a no-op and never resets credentials; a different administrator requires the later authenticated role-assignment workflow.
 
 ## Verification
 
