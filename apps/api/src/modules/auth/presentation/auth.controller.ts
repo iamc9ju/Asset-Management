@@ -1,14 +1,17 @@
 import {
   Body,
   Controller,
+  Get,
   HttpCode,
   HttpStatus,
   Post,
   Req,
   Res,
+  UseGuards,
 } from "@nestjs/common";
 import {
   ApiBadRequestResponse,
+  ApiBearerAuth,
   ApiInternalServerErrorResponse,
   ApiOperation,
   ApiProduces,
@@ -19,14 +22,20 @@ import type { Response } from "express";
 import { API_ROUTE } from "../../../shared/http/api-route.constants";
 import { ApiDataResponseDocumentation } from "../../../shared/http/openapi/api-response.openapi";
 import { ErrorResponseEnvelopeOpenApi } from "../../../shared/http/openapi/error-response.openapi";
+import { OPENAPI_SECURITY_SCHEME } from "../../../shared/http/openapi/openapi.constants";
 import type { RequestWithId } from "../../../shared/http/request-id/request-id.types";
 import { createApiDataResponse } from "../../../shared/http/responses/api-response.factory";
 import type { ApiDataResponse } from "../../../shared/http/responses/api-response.types";
 import { LoginService } from "../application/services/login.service";
+import type { AuthenticatedIdentity } from "../domain/authenticated-identity";
+import { AUTH_HTTP_HEADER, AUTH_TOKEN_TYPE } from "../domain/auth.constants";
 import { createLoginClientContext } from "./auth-request-context";
 import { AuthCookieService } from "./auth-cookie.service";
+import { CurrentIdentity } from "./decorators/current-identity.decorator";
 import { LoginRequestDto } from "./dto/login.request";
 import { LoginResponseDataDto } from "./dto/login.response";
+import { MeResponseDataDto } from "./dto/me.response";
+import { AccessTokenGuard } from "./guards/access-token.guard";
 
 @ApiTags("Authentication")
 @ApiProduces("application/json")
@@ -82,6 +91,38 @@ export class AuthController {
       access_token: result.accessToken,
       token_type: result.tokenType,
       expires_in: result.expiresIn,
+    });
+  }
+
+  @Get(API_ROUTE.AUTH.ME)
+  @UseGuards(AccessTokenGuard)
+  @ApiBearerAuth(OPENAPI_SECURITY_SCHEME.ACCESS_TOKEN)
+  @ApiOperation({
+    summary: "Get the current authenticated user",
+    description:
+      "Requires a valid access token and an active server-side session.",
+  })
+  @ApiDataResponseDocumentation({ model: MeResponseDataDto })
+  @ApiUnauthorizedResponse({
+    type: ErrorResponseEnvelopeOpenApi,
+    description:
+      "The access token is invalid or expired, or its server-side session is unavailable.",
+    headers: {
+      [AUTH_HTTP_HEADER.WWW_AUTHENTICATE]: {
+        description: "Bearer authentication challenge.",
+        schema: { type: "string", example: AUTH_TOKEN_TYPE.BEARER },
+      },
+    },
+  })
+  @ApiInternalServerErrorResponse({ type: ErrorResponseEnvelopeOpenApi })
+  me(
+    @CurrentIdentity() identity: AuthenticatedIdentity,
+  ): ApiDataResponse<MeResponseDataDto> {
+    return createApiDataResponse({
+      user_id: identity.userId,
+      display_name: identity.displayName,
+      status: identity.status,
+      permissions: [...identity.permissionCodes],
     });
   }
 }

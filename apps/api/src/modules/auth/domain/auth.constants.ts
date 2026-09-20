@@ -2,6 +2,11 @@ export const AUTH_TOKEN_TYPE = {
   BEARER: "Bearer",
 } as const;
 
+export const AUTH_HTTP_HEADER = {
+  AUTHORIZATION: "authorization",
+  WWW_AUTHENTICATE: "WWW-Authenticate",
+} as const;
+
 export const AUTH_COOKIE = {
   SECURE_REFRESH_TOKEN_NAME: "__Secure-am_refresh",
   DEVELOPMENT_REFRESH_TOKEN_NAME: "am_refresh",

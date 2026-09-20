@@ -6,10 +6,7 @@ import {
   type SwaggerDocumentOptions,
 } from "@nestjs/swagger";
 import { OPENAPI_ROUTE } from "../shared/http/api-route.constants";
-
-export const OPENAPI_SECURITY_SCHEME = {
-  ACCESS_TOKEN: "access-token",
-} as const;
+import { OPENAPI_SECURITY_SCHEME } from "../shared/http/openapi/openapi.constants";
 
 const OPENAPI_DOCUMENT_TITLE = "Asset Management API";
 const OPENAPI_DOCUMENT_DESCRIPTION =
