@@ -1,7 +1,7 @@
 # Authentication and Authorization Implementation Plan
 
-- Status: In progress — Phase 4A implemented; verification pending
-- Updated: 2026-09-20
+- Status: In progress — Phase 4A complete and verified; Phase 4B not started
+- Updated: 2026-09-21
 - Owner: API
 - Target branch: `feature/auth-protected-requests`
 
@@ -487,7 +487,7 @@ Status: Complete and verified on 2026-09-18
 
 ### Phase 4 — Protected requests
 
-Status: Phase 4A implemented; verification pending. Phase 4B permission enforcement has not started.
+Status: Phase 4A complete and verified. Phase 4B permission enforcement has not started.
 
 1. implement access-token guard
 2. load active user and session on every protected request
