@@ -1,9 +1,9 @@
 # Authentication and Authorization Implementation Plan
 
-- Status: In progress — Phases 1–3 implemented and verified
-- Updated: 2026-09-17
+- Status: In progress — Phase 4A complete and verified; Phase 4B not started
+- Updated: 2026-09-21
 - Owner: API
-- Target branch: `feature/authentication-login`
+- Target branch: `feature/auth-protected-requests`
 
 ## Authority and related documents
 
@@ -153,7 +153,7 @@ apps/api/src/modules/
     │   ├── services/logout.service.ts
     │   └── services/revoke-session.service.ts
     ├── domain/
-    │   ├── auth-principal.ts
+    │   ├── authenticated-identity.ts
     │   ├── refresh-token.ts
     │   └── session-policy.ts
     ├── infrastructure/
@@ -166,7 +166,7 @@ apps/api/src/modules/
     │       ├── entities/auth-refresh-token.orm-entity.ts
     │       └── auth-session.repository.ts
     ├── presentation/
-    │   ├── decorators/current-principal.decorator.ts
+    │   ├── decorators/current-identity.decorator.ts
     │   ├── decorators/require-permissions.decorator.ts
     │   ├── dto/login.request.ts
     │   ├── guards/access-token.guard.ts
@@ -266,7 +266,7 @@ A verified signature is only the first authentication step. Every protected requ
 - current time is before idle expiration
 - current time is before absolute expiration
 
-The request-scoped principal can cache this result for the remainder of the same request. Cross-request authorization state must not be trusted solely from JWT claims.
+The request-scoped authenticated identity can cache this result for the remainder of the same request. Cross-request authorization state must not be trusted solely from JWT claims.
 
 ## Refresh-token rules
 
@@ -486,6 +486,8 @@ Status: Complete and verified on 2026-09-18
 5. make repeated execution for the same normalized administrator email a credential-preserving no-op
 
 ### Phase 4 — Protected requests
+
+Status: Phase 4A complete and verified. Phase 4B permission enforcement has not started.
 
 1. implement access-token guard
 2. load active user and session on every protected request
