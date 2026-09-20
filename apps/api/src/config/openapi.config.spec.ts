@@ -2,7 +2,8 @@ import type { INestApplication } from "@nestjs/common";
 import type { ConfigService } from "@nestjs/config";
 import { SwaggerModule, type OpenAPIObject } from "@nestjs/swagger";
 import { OPENAPI_ROUTE } from "../shared/http/api-route.constants";
-import { OPENAPI_SECURITY_SCHEME, configureOpenApi } from "./openapi.config";
+import { OPENAPI_SECURITY_SCHEME } from "../shared/http/openapi/openapi.constants";
+import { configureOpenApi } from "./openapi.config";
 
 function createConfigService(values: Record<string, boolean>): ConfigService {
   return {

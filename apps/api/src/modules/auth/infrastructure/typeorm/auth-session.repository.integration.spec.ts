@@ -13,6 +13,7 @@ import { LOGIN_FAILURE_REASON } from "../../application/ports/auth-event.port";
 import { CREATE_LOGIN_SESSION_RESULT } from "../../application/ports/auth-session-repository.port";
 import { UserOrmEntity } from "../../../iam/infrastructure/typeorm/entities/user.orm-entity";
 import { TypeOrmAuthEventRepository } from "./auth-event.repository";
+import { TypeOrmAuthSessionQueryRepository } from "./auth-session-query.repository";
 import { TypeOrmAuthSessionRepository } from "./auth-session.repository";
 import { AuthRefreshTokenOrmEntity } from "./entities/auth-refresh-token.orm-entity";
 import { AuthSessionOrmEntity } from "./entities/auth-session.orm-entity";
@@ -32,6 +33,7 @@ describeWithDatabase("TypeOrmAuthSessionRepository integration", () => {
 
   let dataSource: DataSource;
   let repository: TypeOrmAuthSessionRepository;
+  let sessionQueryRepository: TypeOrmAuthSessionQueryRepository;
   let eventRepository: TypeOrmAuthEventRepository;
   let schemaCreated = false;
 
@@ -97,6 +99,9 @@ describeWithDatabase("TypeOrmAuthSessionRepository integration", () => {
     await queryRunner.release();
 
     repository = new TypeOrmAuthSessionRepository(dataSource);
+    sessionQueryRepository = new TypeOrmAuthSessionQueryRepository(
+      dataSource.getRepository(AuthSessionOrmEntity),
+    );
     eventRepository = new TypeOrmAuthEventRepository(dataSource);
   });
 
@@ -248,6 +253,25 @@ describeWithDatabase("TypeOrmAuthSessionRepository integration", () => {
 
     expect(countRows[0]).toEqual({ count: 0 });
     expect(user).toEqual({ last_login_at: null, version: "1" });
+  });
+
+  it("loads current session state only for the matching user", async () => {
+    const userId = await insertUser();
+    const input = createInput(userId);
+    await repository.createLoginSession(input);
+
+    await expect(
+      sessionQueryRepository.findByIdAndUserId(input.sessionId, userId),
+    ).resolves.toEqual({
+      sessionId: input.sessionId,
+      userId,
+      idleExpiresAt: IDLE_EXPIRES_AT,
+      absoluteExpiresAt: ABSOLUTE_EXPIRES_AT,
+      revokedAt: null,
+    });
+    await expect(
+      sessionQueryRepository.findByIdAndUserId(input.sessionId, randomUUID()),
+    ).resolves.toBeNull();
   });
 
   it("rolls back the user update and session when the token insert fails", async () => {
