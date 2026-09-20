@@ -31,6 +31,14 @@ Health/readiness, OpenAPI JSON, binary/file streaming และ `204 No Content`
 
 Controller ต้องสร้าง envelope อย่างชัดเจนผ่าน shared response factory และประกาศ schema ผ่าน shared OpenAPI decorator ระบบไม่ใช้ global success-response interceptor เพราะ interceptor อัตโนมัติเสี่ยง wrap response ซ้ำและเปลี่ยน contract ของ health, no-content หรือ streaming endpoint โดยไม่ตั้งใจ
 
+## Protected requests
+
+Protected endpoint รับ access token ผ่าน `Authorization: Bearer <token>` เท่านั้น Access token ที่ signature ถูกต้องยังไม่เพียงพอ ระบบต้องโหลด user, session และ effective permissions ปัจจุบันจากฐานข้อมูลทุก request แล้วตรวจว่า user เป็น `ACTIVE`, session ไม่ถูก revoke และยังไม่เกิน idle หรือ absolute expiration
+
+`GET /api/v1/auth/me` เป็น protected endpoint แรก Response ส่งเฉพาะ user ID, display name, active status และ current permission codes โดยไม่ส่ง token, password data, credential hash หรือข้อมูล session ภายใน
+
+Authentication failure ใช้ stable `401` codes ได้แก่ `AUTH_ACCESS_TOKEN_INVALID`, `AUTH_ACCESS_TOKEN_EXPIRED`, `AUTH_SESSION_INVALID` และ `AUTH_SESSION_EXPIRED` พร้อม `WWW-Authenticate: Bearer` ส่วน database หรือ dependency failure ต้องคงเป็น sanitized server error และห้ามถูกแปลงเป็น authentication failure
+
 Implementation foundation อยู่ใน:
 
 - `apps/api/src/shared/http/responses/api-response.types.ts`

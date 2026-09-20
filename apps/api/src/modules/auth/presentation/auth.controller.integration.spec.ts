@@ -4,21 +4,29 @@ import { APP_FILTER } from "@nestjs/core";
 import { Test } from "@nestjs/testing";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import type { OpenAPIObject } from "@nestjs/swagger";
+import { AuthenticateAccessTokenService } from "../application/services/authenticate-access-token.service";
 import type { AuthSessionConfig } from "../application/config/auth-session.config";
 import { AUTH_SESSION_CONFIG } from "../application/config/auth-session.config";
 import { LoginService } from "../application/services/login.service";
 import { CLOCK, type Clock } from "../application/ports/clock.port";
-import { AUTH_COOKIE, AUTH_TOKEN_TYPE } from "../domain/auth.constants";
+import {
+  AUTH_COOKIE,
+  AUTH_HTTP_HEADER,
+  AUTH_TOKEN_TYPE,
+} from "../domain/auth.constants";
+import { USER_STATUS } from "../../iam/domain/user-status";
 import { APP_ERROR_CODE } from "../../../shared/errors/app-error-code";
 import { AppError } from "../../../shared/errors/app-error";
 import type { ErrorResponseEnvelope } from "../../../shared/errors/error-response.types";
 import { API_GLOBAL_PREFIX } from "../../../shared/http/api-route.constants";
 import { GlobalExceptionFilter } from "../../../shared/http/errors/global-exception.filter";
+import { OPENAPI_SECURITY_SCHEME } from "../../../shared/http/openapi/openapi.constants";
 import { REQUEST_ID_HEADER } from "../../../shared/http/request-id/request-id.constants";
 import { requestIdMiddleware } from "../../../shared/http/request-id/request-id.middleware";
 import { createValidationPipe } from "../../../shared/http/validation/validation.pipe";
 import { AuthController } from "./auth.controller";
 import { AuthCookieService } from "./auth-cookie.service";
+import { AccessTokenGuard } from "./guards/access-token.guard";
 
 const NOW = new Date("2026-09-17T10:00:00.000Z");
 const REFRESH_EXPIRES_AT = new Date("2026-09-24T10:00:00.000Z");
@@ -27,9 +35,11 @@ describe("AuthController integration", () => {
   let app: INestApplication;
   let baseUrl: string;
   let loginService: { execute: jest.Mock };
+  let authenticateAccessTokenService: { execute: jest.Mock };
 
   beforeAll(async () => {
     loginService = { execute: jest.fn() };
+    authenticateAccessTokenService = { execute: jest.fn() };
     const sessionConfig: AuthSessionConfig = {
       idleTtlSeconds: 86_400,
       absoluteTtlSeconds: 604_800,
@@ -40,9 +50,14 @@ describe("AuthController integration", () => {
       controllers: [AuthController],
       providers: [
         { provide: LoginService, useValue: loginService },
+        {
+          provide: AuthenticateAccessTokenService,
+          useValue: authenticateAccessTokenService,
+        },
         { provide: AUTH_SESSION_CONFIG, useValue: sessionConfig },
         { provide: CLOCK, useValue: clock },
         AuthCookieService,
+        AccessTokenGuard,
         { provide: APP_FILTER, useClass: GlobalExceptionFilter },
       ],
     }).compile();
@@ -60,6 +75,7 @@ describe("AuthController integration", () => {
 
   beforeEach(() => {
     loginService.execute.mockReset();
+    authenticateAccessTokenService.execute.mockReset();
   });
 
   afterAll(async () => {
@@ -158,7 +174,55 @@ describe("AuthController integration", () => {
     expect(loginService.execute).not.toHaveBeenCalled();
   });
 
-  it("publishes the login request and response schemas in OpenAPI", () => {
+  it("returns the current user from the authenticated identity", async () => {
+    authenticateAccessTokenService.execute.mockResolvedValue({
+      userId: "11111111-1111-4111-8111-111111111111",
+      sessionId: "22222222-2222-4222-8222-222222222222",
+      displayName: "System Administrator",
+      status: USER_STATUS.ACTIVE,
+      permissionVersion: "3",
+      permissionCodes: ["assets:read", "users:read"],
+    });
+
+    const response = await fetch(`${baseUrl}/api/v1/auth/me`, {
+      headers: {
+        [AUTH_HTTP_HEADER.AUTHORIZATION]: "Bearer signed-access-token",
+      },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get(REQUEST_ID_HEADER)).toEqual(expect.any(String));
+    await expect(response.json()).resolves.toEqual({
+      data: {
+        user_id: "11111111-1111-4111-8111-111111111111",
+        display_name: "System Administrator",
+        status: USER_STATUS.ACTIVE,
+        permissions: ["assets:read", "users:read"],
+      },
+    });
+    expect(authenticateAccessTokenService.execute).toHaveBeenCalledWith(
+      "signed-access-token",
+    );
+  });
+
+  it("rejects a missing Bearer token with the standard error contract", async () => {
+    const response = await fetch(`${baseUrl}/api/v1/auth/me`);
+    const body = (await response.json()) as ErrorResponseEnvelope;
+
+    expect(response.status).toBe(401);
+    expect(response.headers.get(AUTH_HTTP_HEADER.WWW_AUTHENTICATE)).toBe(
+      AUTH_TOKEN_TYPE.BEARER,
+    );
+    expect(body.error).toMatchObject({
+      code: APP_ERROR_CODE.AUTH_ACCESS_TOKEN_INVALID,
+      message: "The access token is invalid.",
+      details: {},
+      request_id: expect.any(String),
+    });
+    expect(authenticateAccessTokenService.execute).not.toHaveBeenCalled();
+  });
+
+  it("publishes the authentication request and response schemas in OpenAPI", () => {
     const document: OpenAPIObject = SwaggerModule.createDocument(
       app,
       new DocumentBuilder().setTitle("Auth test").setVersion("1").build(),
@@ -189,5 +253,25 @@ describe("AuthController integration", () => {
       },
     });
     expect(operation?.responses["401"]).toBeDefined();
+
+    const meOperation = document.paths["/api/v1/auth/me"]?.get;
+    expect(meOperation).toBeDefined();
+    expect(meOperation?.security).toEqual([
+      { [OPENAPI_SECURITY_SCHEME.ACCESS_TOKEN]: [] },
+    ]);
+    expect(meOperation?.responses["200"]).toMatchObject({
+      content: {
+        "application/json": {
+          schema: {
+            type: "object",
+            required: ["data"],
+            properties: {
+              data: { $ref: "#/components/schemas/MeResponseDataDto" },
+            },
+          },
+        },
+      },
+    });
+    expect(meOperation?.responses["401"]).toBeDefined();
   });
 });

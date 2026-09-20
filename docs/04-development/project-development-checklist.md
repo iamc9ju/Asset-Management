@@ -2,7 +2,7 @@
 
 เอกสารนี้เป็น source of truth สำหรับติดตามสถานะการพัฒนาและประวัติงานที่เสร็จแล้ว โดยใช้ร่วมกับ Git history, requirements, architecture baseline และ ADRs
 
-- อัปเดตล่าสุด: 2026-09-18
+- อัปเดตล่าสุด: 2026-09-20
 - เขตเวลา: Asia/Bangkok
 - ขอบเขตปัจจุบัน: MVP
 
@@ -20,7 +20,7 @@
 
 ### Authentication Phase 4 — Protected Requests
 
-สถานะ: Authentication Phase 1–3.1, OpenAPI foundation และ first-administrator bootstrap เสร็จและตรวจสอบแล้ว; ขั้นถัดไปเริ่ม protected requests
+สถานะ: Authentication Phase 1–3.1, OpenAPI foundation, standard API response และ first-administrator bootstrap เสร็จและตรวจสอบแล้ว; Phase 4A implement แล้วและรอการตรวจสอบ
 
 - [x] Merge Initial Database Schema เข้าสู่ `main`
 - [x] เพิ่ม Authentication configuration และ cryptography foundation
@@ -35,7 +35,8 @@
 - [x] เพิ่ม OpenAPI/Swagger foundation
 - [x] Authentication Phase 3 — Login
 - [x] ตรวจ Bootstrap Administrator command, focused tests, full tests, typecheck, build และ manual login
-- [ ] ตรวจ standard API success/pagination response foundation และ OpenAPI contracts
+- [x] ตรวจ standard API success/pagination response foundation และ OpenAPI contracts
+- [ ] ตรวจ Authentication Phase 4A — Access Token Guard และ `GET /auth/me`
 - [ ] Authentication Phase 4 — Protected requests และ permission guards
 
 ## Milestone Checklist

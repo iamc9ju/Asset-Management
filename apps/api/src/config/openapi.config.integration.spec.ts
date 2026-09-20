@@ -6,7 +6,8 @@ import {
   API_GLOBAL_PREFIX,
   OPENAPI_ROUTE,
 } from "../shared/http/api-route.constants";
-import { OPENAPI_SECURITY_SCHEME, configureOpenApi } from "./openapi.config";
+import { OPENAPI_SECURITY_SCHEME } from "../shared/http/openapi/openapi.constants";
+import { configureOpenApi } from "./openapi.config";
 
 @ApiTags("OpenAPI Test")
 @Controller("openapi-test")
