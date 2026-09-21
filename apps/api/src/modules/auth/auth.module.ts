@@ -27,6 +27,7 @@ import { AuthSessionOrmEntity } from "./infrastructure/typeorm/entities/auth-ses
 import { AuthController } from "./presentation/auth.controller";
 import { AuthCookieService } from "./presentation/auth-cookie.service";
 import { AccessTokenGuard } from "./presentation/guards/access-token.guard";
+import { PermissionGuard } from "./presentation/guards/permission.guard";
 
 @Module({
   imports: [
@@ -74,6 +75,7 @@ import { AccessTokenGuard } from "./presentation/guards/access-token.guard";
     AuthenticateAccessTokenService,
     AuthCookieService,
     AccessTokenGuard,
+    PermissionGuard,
   ],
   exports: [
     CLOCK,
@@ -81,6 +83,7 @@ import { AccessTokenGuard } from "./presentation/guards/access-token.guard";
     ACCESS_TOKEN_SERVICE,
     REFRESH_TOKEN_SERVICE,
     AccessTokenGuard,
+    PermissionGuard,
   ],
 })
 export class AuthModule {}

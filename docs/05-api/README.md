@@ -39,6 +39,12 @@ Protected endpoint รับ access token ผ่าน `Authorization: Bearer <t
 
 Authentication failure ใช้ stable `401` codes ได้แก่ `AUTH_ACCESS_TOKEN_INVALID`, `AUTH_ACCESS_TOKEN_EXPIRED`, `AUTH_SESSION_INVALID` และ `AUTH_SESSION_EXPIRED` พร้อม `WWW-Authenticate: Bearer` ส่วน database หรือ dependency failure ต้องคงเป็น sanitized server error และห้ามถูกแปลงเป็น authentication failure
 
+Permission-protected operation ต้องประกาศ typed permission codes ผ่าน `@RequirePermissions(...)` ซึ่งรวม access-token guard, permission guard และ OpenAPI `401`/`403` contract ไว้ด้วย Permission หลายค่าใน decorator เดียวใช้เงื่อนไข AND คือผู้ใช้ต้องมีครบทุกค่า ระบบตรวจจาก current effective permissions ที่โหลดระหว่าง request นั้น และตอบ `403 AUTH_PERMISSION_DENIED` เมื่อ permission ไม่ครบ ห้ามตรวจ role name โดยตรงใน controller หรือ application service
+
+Permission guard ทำหน้าที่ตรวจ coarse-grained operation permission เท่านั้น ส่วน ownership, assigned location, audit scope หรือ object-level policy ต้องตรวจใน application service ของ module เจ้าของข้อมูล การใช้ permission guard โดยไม่มี required-permission metadata ต้อง fail closed
+
+Typed permission source of truth อยู่ที่ `apps/api/src/modules/iam/domain/permission-code.ts`; seed catalog ต้อง import และ re-export source นี้แทนการประกาศ string ซ้ำ
+
 Implementation foundation อยู่ใน:
 
 - `apps/api/src/shared/http/responses/api-response.types.ts`
