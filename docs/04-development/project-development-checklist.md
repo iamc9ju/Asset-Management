@@ -20,7 +20,7 @@
 
 ### Authentication Phase 4 — Protected Requests
 
-สถานะ: Authentication Phase 1–4A, OpenAPI foundation, standard API response และ first-administrator bootstrap เสร็จและตรวจสอบแล้ว; ขั้นถัดไปคือ Phase 4B permission enforcement
+สถานะ: Authentication Phase 1–4, OpenAPI foundation, standard API response และ first-administrator bootstrap เสร็จและตรวจสอบแล้ว; ขั้นถัดไปคือ Phase 5 refresh-token rotation และ reuse detection
 
 - [x] Merge Initial Database Schema เข้าสู่ `main`
 - [x] เพิ่ม Authentication configuration และ cryptography foundation
@@ -37,7 +37,8 @@
 - [x] ตรวจ Bootstrap Administrator command, focused tests, full tests, typecheck, build และ manual login
 - [x] ตรวจ standard API success/pagination response foundation และ OpenAPI contracts
 - [x] ตรวจ Authentication Phase 4A — Access Token Guard และ `GET /auth/me`
-- [ ] Authentication Phase 4 — Protected requests และ permission guards
+- [x] ตรวจ Authentication Phase 4B — typed permission metadata, permission guard, OpenAPI และ current-permission behavior
+- [x] Authentication Phase 4 — Protected requests และ permission guards
 
 ## Milestone Checklist
 
@@ -667,15 +668,62 @@ Architecture/technical decisions:
 - ยังไม่มี authenticated Create-User/Invite API และ role-assignment endpoint
 - Access-token guard, permission guard และ `GET /auth/me` อยู่ใน Authentication Phase 4
 
+### 2026-09-21 — Authentication Phase 4 — Protected Requests and Permission Enforcement
+
+สถานะ: เสร็จและตรวจสอบแล้ว
+
+เป้าหมายและขอบเขต:
+
+- ตรวจ access token และ server-side session ก่อนเข้าถึง protected endpoint
+- โหลด active user, session และ effective permissions ปัจจุบันทุก request
+- เพิ่ม typed permission enforcement และ `GET /api/v1/auth/me`
+- ยังไม่รวม refresh rotation, logout, session management และ object-level policy ของ domain ที่ยังไม่ได้ implement
+
+สิ่งที่ทำ:
+
+- เพิ่ม request-scoped `AuthenticatedIdentity` และ `@CurrentIdentity()`
+- เพิ่ม `AccessTokenGuard` สำหรับ Bearer token, active user และ active session
+- เพิ่ม `GET /api/v1/auth/me` พร้อม standard response envelope และ OpenAPI contract
+- ย้าย permission codes ไปยัง IAM domain เพื่อเป็น typed source of truth เดียว
+- เพิ่ม `@RequirePermissions(...)` ซึ่งรวม access-token guard, permission guard และ OpenAPI `401`/`403`
+- เพิ่ม `PermissionGuard` แบบ AND semantics และ fail closed เมื่อไม่มี required-permission metadata
+- เพิ่ม unit/integration tests สำหรับ `401`, `403`, successful authorization และ permission change ที่มีผลใน request ถัดไป
+
+Architecture/technical decisions:
+
+- JWT ใช้ระบุตัว user/session แต่ไม่ถือ permission snapshot เป็น authorization source
+- Effective permissions ถูกอ่านจาก current database state ทุก protected request เพื่อให้ revoke session และเปลี่ยน permission มีผลทันที
+- Permission guard ตรวจ operation-level permission; ownership และ object scope ต้องตรวจใน application service ของ module เจ้าของข้อมูล
+- Application code ตรวจ permission code และห้ามใช้ role name เป็น authorization condition
+
+ผลการตรวจสอบ:
+
+- Formatter: Prettier ผ่านสำหรับไฟล์ใน Phase 4B
+- Typecheck: `pnpm --filter @asset-management/api typecheck` ผ่าน
+- Focused tests: `pnpm --filter @asset-management/api test:auth:protected` ผ่าน
+- Full API test suite: `pnpm --filter @asset-management/api test:all` ผ่าน
+- Production build: `pnpm --filter @asset-management/api build` ผ่าน
+- Diff validation: `git diff --check` ผ่าน
+
+สิ่งที่ยังไม่ครอบคลุมและความเสี่ยงคงเหลือ:
+
+- Refresh token ยังไม่ rotate และยังไม่มี reuse detection จนกว่า Phase 5 จะเสร็จ
+- Logout และ session-management endpoints อยู่ใน Phase 6
+- Domain endpoints ที่เพิ่มภายหลังต้องประกาศ `@RequirePermissions(...)` และตรวจ object-level policy ใน application service
+
+งานถัดไป:
+
+- Authentication Phase 5 — Refresh-token rotation และ reuse detection
+
 ## Blocked Items
 
 ยังไม่มีรายการที่บันทึก
 
 ## Next Recommended Tasks
 
-1. ทำ Authentication Phase 4 — Protected requests และ permission guards
-2. ทำ Authentication Phase 5 — Refresh-token rotation และ reuse detection
-3. ทำ Authentication Phase 6 — Logout และ session management
+1. ทำ Authentication Phase 5 — Refresh-token rotation และ reuse detection
+2. ทำ Authentication Phase 6 — Logout และ session management
+3. ทำ Authentication Phase 7 — Rate limiting, audit และ cleanup
 
 ## Update Template
 

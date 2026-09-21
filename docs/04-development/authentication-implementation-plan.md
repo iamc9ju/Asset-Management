@@ -1,9 +1,9 @@
 # Authentication and Authorization Implementation Plan
 
-- Status: In progress — Phase 4A complete and verified; Phase 4B not started
+- Status: In progress — Phase 4 complete and verified; Phase 5 not started
 - Updated: 2026-09-21
 - Owner: API
-- Target branch: `feature/auth-protected-requests`
+- Target branch: `feature/auth-permission-enforcement`
 
 ## Authority and related documents
 
@@ -355,7 +355,7 @@ resource:action
 resource:action:any
 ```
 
-Examples include `users:read`, `users:manage-roles`, `assets:update`, `audit:scan`, and `audit:scan:any`.
+Examples include `user:read`, `role:permission:manage`, `asset:update`, `audit:scan`, and `audit:scan:any`.
 
 The final permission and system-role catalog is a separate prerequisite before authorization administration is implemented. Its seed must be idempotent, update system-owned descriptions and grants safely, and never overwrite custom roles.
 
@@ -487,7 +487,7 @@ Status: Complete and verified on 2026-09-18
 
 ### Phase 4 — Protected requests
 
-Status: Phase 4A complete and verified. Phase 4B permission enforcement has not started.
+Status: Complete and verified on 2026-09-21.
 
 1. implement access-token guard
 2. load active user and session on every protected request
