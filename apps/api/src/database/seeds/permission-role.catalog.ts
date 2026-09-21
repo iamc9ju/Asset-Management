@@ -1,48 +1,9 @@
-export const PERMISSION_CODE = {
-  USER_READ: "user:read",
-  USER_CREATE: "user:create",
-  USER_STATUS_UPDATE: "user:status:update",
-  ROLE_READ: "role:read",
-  ROLE_CREATE: "role:create",
-  ROLE_UPDATE: "role:update",
-  ROLE_ASSIGN: "role:assign",
-  ROLE_PERMISSION_MANAGE: "role:permission:manage",
-  SESSION_READ_ANY: "session:read:any",
-  SESSION_REVOKE_ANY: "session:revoke:any",
-  CATEGORY_READ: "category:read",
-  CATEGORY_CREATE: "category:create",
-  CATEGORY_UPDATE: "category:update",
-  LOCATION_READ: "location:read",
-  LOCATION_CREATE: "location:create",
-  LOCATION_UPDATE: "location:update",
-  ASSET_READ: "asset:read",
-  ASSET_CREATE: "asset:create",
-  ASSET_UPDATE: "asset:update",
-  ASSET_LIFECYCLE_UPDATE: "asset:lifecycle:update",
-  ASSET_IDENTIFIER_READ: "asset:identifier:read",
-  ASSET_IDENTIFIER_MANAGE: "asset:identifier:manage",
-  ASSET_ASSIGN: "asset:assign",
-  ASSET_TRANSFER: "asset:transfer",
-  AUDIT_CREATE: "audit:create",
-  AUDIT_SCOPE_MANAGE: "audit:scope:manage",
-  AUDIT_START: "audit:start",
-  AUDIT_READ: "audit:read",
-  AUDIT_SCAN: "audit:scan",
-  AUDIT_SCAN_ANY: "audit:scan:any",
-  AUDIT_SUBMIT: "audit:submit",
-  AUDIT_FINALIZE: "audit:finalize",
-  AUDIT_REOPEN: "audit:reopen",
-  ISSUE_CREATE: "issue:create",
-  ISSUE_READ: "issue:read",
-  ISSUE_INVESTIGATE: "issue:investigate",
-  ISSUE_RESOLVE: "issue:resolve",
-  ISSUE_CLOSE: "issue:close",
-  ISSUE_REOPEN: "issue:reopen",
-  ACTIVITY_LOG_READ: "activity-log:read",
-} as const;
+import {
+  PERMISSION_CODE,
+  type PermissionCode,
+} from "../../modules/iam/domain/permission-code";
 
-export type PermissionCode =
-  (typeof PERMISSION_CODE)[keyof typeof PERMISSION_CODE];
+export { PERMISSION_CODE, type PermissionCode };
 
 export const SYSTEM_ROLE_CODE = {
   SYSTEM_ADMIN: "SYSTEM_ADMIN",

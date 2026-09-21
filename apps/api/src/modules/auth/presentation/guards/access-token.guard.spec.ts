@@ -5,6 +5,7 @@ import { AppError } from "../../../../shared/errors/app-error";
 import { AuthenticateAccessTokenService } from "../../application/services/authenticate-access-token.service";
 import type { AuthenticatedIdentity } from "../../domain/authenticated-identity";
 import { AUTH_HTTP_HEADER, AUTH_TOKEN_TYPE } from "../../domain/auth.constants";
+import { PERMISSION_CODE } from "../../../iam/domain/permission-code";
 import { USER_STATUS } from "../../../iam/domain/user-status";
 import type { AuthenticatedRequest } from "../authenticated-request";
 import {
@@ -19,7 +20,7 @@ const AUTHENTICATED_IDENTITY: AuthenticatedIdentity = {
   displayName: "Test User",
   status: USER_STATUS.ACTIVE,
   permissionVersion: "1",
-  permissionCodes: ["assets:read"],
+  permissionCodes: [PERMISSION_CODE.ASSET_READ],
 };
 
 interface HttpTestContext {
