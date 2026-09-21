@@ -1,4 +1,5 @@
 import { ApiProperty } from "@nestjs/swagger";
+import { PERMISSION_CODE } from "../../../iam/domain/permission-code";
 import { USER_STATUS, type UserStatus } from "../../../iam/domain/user-status";
 
 export class MeResponseDataDto {
@@ -20,7 +21,7 @@ export class MeResponseDataDto {
   @ApiProperty({
     type: "array",
     items: { type: "string" },
-    example: ["assets:read", "assets:update"],
+    example: [PERMISSION_CODE.ASSET_READ, PERMISSION_CODE.ASSET_UPDATE],
   })
   permissions!: string[];
 }

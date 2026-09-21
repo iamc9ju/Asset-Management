@@ -1,5 +1,6 @@
 import { APP_ERROR_CODE } from "../../../../shared/errors/app-error-code";
 import type { IamAuthQuery } from "../../../iam/application/ports/iam-auth-query.port";
+import { PERMISSION_CODE } from "../../../iam/domain/permission-code";
 import { USER_STATUS, type UserStatus } from "../../../iam/domain/user-status";
 import type { AccessTokenService } from "../ports/access-token.port";
 import type { AuthSessionQuery } from "../ports/auth-session-query.port";
@@ -72,7 +73,7 @@ function authorizationContext(status: UserStatus = USER_STATUS.ACTIVE) {
     displayName: "Test User",
     status,
     permissionVersion: "7",
-    permissionCodes: ["assets:read", "assets:update"],
+    permissionCodes: [PERMISSION_CODE.ASSET_READ, PERMISSION_CODE.ASSET_UPDATE],
   };
 }
 
@@ -203,7 +204,10 @@ describe("AuthenticateAccessTokenService", () => {
       displayName: "Test User",
       status: USER_STATUS.ACTIVE,
       permissionVersion: "7",
-      permissionCodes: ["assets:read", "assets:update"],
+      permissionCodes: [
+        PERMISSION_CODE.ASSET_READ,
+        PERMISSION_CODE.ASSET_UPDATE,
+      ],
     });
 
     expect(dependencies.accessTokenService.verify).toHaveBeenCalledWith(

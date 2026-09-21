@@ -14,6 +14,7 @@ import {
   AUTH_HTTP_HEADER,
   AUTH_TOKEN_TYPE,
 } from "../domain/auth.constants";
+import { PERMISSION_CODE } from "../../iam/domain/permission-code";
 import { USER_STATUS } from "../../iam/domain/user-status";
 import { APP_ERROR_CODE } from "../../../shared/errors/app-error-code";
 import { AppError } from "../../../shared/errors/app-error";
@@ -181,7 +182,7 @@ describe("AuthController integration", () => {
       displayName: "System Administrator",
       status: USER_STATUS.ACTIVE,
       permissionVersion: "3",
-      permissionCodes: ["assets:read", "users:read"],
+      permissionCodes: [PERMISSION_CODE.ASSET_READ, PERMISSION_CODE.USER_READ],
     });
 
     const response = await fetch(`${baseUrl}/api/v1/auth/me`, {
@@ -197,7 +198,7 @@ describe("AuthController integration", () => {
         user_id: "11111111-1111-4111-8111-111111111111",
         display_name: "System Administrator",
         status: USER_STATUS.ACTIVE,
-        permissions: ["assets:read", "users:read"],
+        permissions: [PERMISSION_CODE.ASSET_READ, PERMISSION_CODE.USER_READ],
       },
     });
     expect(authenticateAccessTokenService.execute).toHaveBeenCalledWith(
