@@ -1,10 +1,12 @@
-import type { LoginClientContext } from "./auth-session-repository.port";
+import type { AuthClientContext } from "./auth-client-context.port";
 
 export const AUTH_EVENT_REPOSITORY = Symbol("AUTH_EVENT_REPOSITORY");
 
 export const AUTH_EVENT_ACTION = {
   LOGIN_SUCCEEDED: "LOGIN_SUCCEEDED",
   LOGIN_FAILED: "LOGIN_FAILED",
+  TOKEN_REFRESHED: "TOKEN_REFRESHED",
+  REFRESH_TOKEN_REUSE_DETECTED: "REFRESH_TOKEN_REUSE_DETECTED",
 } as const;
 
 export const LOGIN_FAILURE_REASON = {
@@ -20,7 +22,7 @@ export interface RecordLoginFailureInput {
   readonly targetUserId: string | null;
   readonly reason: LoginFailureReason;
   readonly occurredAt: Date;
-  readonly client: LoginClientContext;
+  readonly client: AuthClientContext;
 }
 
 export interface AuthEventRepository {

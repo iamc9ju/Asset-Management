@@ -66,6 +66,7 @@ Production deployment ต้องตัดสินใจเปิด OpenAPI �
 - ทุก operation ต้องกำหนด `@ApiOperation()` และ success/error responses ที่เป็นไปได้
 - DTO properties ที่อยู่ใน request หรือ response contract ต้องกำหนด `@ApiProperty()` หรือ `@ApiPropertyOptional()`
 - Protected operation ต้องอ้าง bearer scheme `access-token` ผ่าน constant กลางใน `openapi.config.ts`
+- Refresh operation ต้องอ้าง cookie scheme `refresh-token` และประกาศ `Origin` header
 - Error responses ต้องใช้ standard error envelope; ห้ามสร้าง schema เฉพาะ endpoint ที่ไม่ตรงกับ runtime response
 - OpenAPI operation IDs generate จาก controller, method และ version อย่าง deterministic
 
@@ -112,5 +113,38 @@ Response:
 ```
 
 Phase 3 ยังไม่รวม Redis login rate limiting; endpoint ยังไม่ควรเปิดสู่ production traffic จนกว่า security control ใน Authentication Phase 7 จะเสร็จและผ่านการตรวจสอบ
+
+### `POST /api/v1/auth/refresh`
+
+หมุน refresh token แบบ one-time-use และออก access token ใหม่ โดย request body ต้องว่างและ client ต้องส่ง:
+
+- refresh token ผ่าน `HttpOnly` cookie ที่ระบบตั้งจาก login หรือ refresh ครั้งก่อน
+- `Origin` header ที่ตรงกับ `WEB_ORIGIN` ทุกตัวอักษร
+
+เมื่อสำเร็จ ระบบทำงานใน database transaction เดียว: lock current token และ session, ตรวจ token hash แบบ constant-time, สร้าง successor token, mark token เดิมว่าใช้แล้ว, เชื่อม replacement chain, ขยาย idle expiry โดยไม่เกิน absolute expiry และบันทึก `TOKEN_REFRESHED`
+
+Response:
+
+```json
+{
+  "data": {
+    "access_token": "<new-jwt>",
+    "token_type": "Bearer",
+    "expires_in": 900
+  }
+}
+```
+
+Response จะตั้ง replacement refresh cookie ด้วย scope และ security attributes เดิม Token ที่ใช้แล้ว, ถูกแทนที่ หรือถูก revoke จะใช้ซ้ำไม่ได้ หาก secret ของ token ดังกล่าวถูกต้อง ระบบถือว่าเป็น reuse incident และ revoke session พร้อม refresh-token family ทั้งหมด ก่อนตอบ `401 AUTH_SESSION_INVALID`
+
+Security/error behavior:
+
+- missing, malformed, unknown หรือ wrong-secret credential ตอบ `401 AUTH_SESSION_INVALID` โดยไม่ revoke session อื่น
+- expired idle/absolute window ตอบ `401 AUTH_SESSION_EXPIRED`
+- missing หรือ untrusted `Origin` ตอบ `403 FORBIDDEN` ก่อนอ่าน refresh credential
+- credential/session error จะ clear refresh cookie
+- request พร้อม token เดียวกันที่ชนกันมีได้เพียงหนึ่ง rotation success; attempt อื่นจะเข้า reuse handling
+
+Phase 5 ยังไม่รวม Redis refresh rate limiting ซึ่งอยู่ใน Authentication Phase 7 และยังไม่รวม logout/session-management endpoints ซึ่งอยู่ใน Phase 6
 
 Endpoint catalog และ error model ฉบับ baseline อยู่ใน [MVP Architecture](../02-architecture/mvp-architecture-baseline.md)

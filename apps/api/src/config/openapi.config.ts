@@ -7,6 +7,7 @@ import {
 } from "@nestjs/swagger";
 import { OPENAPI_ROUTE } from "../shared/http/api-route.constants";
 import { OPENAPI_SECURITY_SCHEME } from "../shared/http/openapi/openapi.constants";
+import { AUTH_COOKIE } from "../modules/auth/domain/auth.constants";
 
 const OPENAPI_DOCUMENT_TITLE = "Asset Management API";
 const OPENAPI_DOCUMENT_DESCRIPTION =
@@ -25,6 +26,11 @@ export function configureOpenApi(
   }
 
   const uiEnabled = config.getOrThrow<boolean>("OPENAPI_UI_ENABLED");
+  const refreshCookieName = config.getOrThrow<boolean>(
+    "AUTH_REFRESH_COOKIE_SECURE",
+  )
+    ? AUTH_COOKIE.SECURE_REFRESH_TOKEN_NAME
+    : AUTH_COOKIE.DEVELOPMENT_REFRESH_TOKEN_NAME;
   const documentConfig = new DocumentBuilder()
     .setTitle(OPENAPI_DOCUMENT_TITLE)
     .setDescription(OPENAPI_DOCUMENT_DESCRIPTION)
@@ -38,6 +44,15 @@ export function configureOpenApi(
           "Short-lived access token returned by an authentication endpoint.",
       },
       OPENAPI_SECURITY_SCHEME.ACCESS_TOKEN,
+    )
+    .addCookieAuth(
+      refreshCookieName,
+      {
+        type: "apiKey",
+        description:
+          "Rotating opaque refresh token stored in an HttpOnly cookie.",
+      },
+      OPENAPI_SECURITY_SCHEME.REFRESH_TOKEN,
     )
     .build();
   const documentOptions: SwaggerDocumentOptions = {

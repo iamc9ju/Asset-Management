@@ -1,11 +1,11 @@
 import { isIP } from "node:net";
 import type { RequestWithId } from "../../../shared/http/request-id/request-id.types";
-import type { LoginClientContext } from "../application/ports/auth-session-repository.port";
+import type { AuthClientContext } from "../application/ports/auth-client-context.port";
 import { AUTH_CLIENT_METADATA_LIMIT } from "../domain/auth.constants";
 
-export function createLoginClientContext(
+export function createAuthClientContext(
   request: RequestWithId,
-): LoginClientContext {
+): AuthClientContext {
   return {
     requestId: request.requestId,
     ipAddress: normalizeIpAddress(request.ip),

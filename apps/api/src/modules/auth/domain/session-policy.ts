@@ -1,13 +1,26 @@
 const MILLISECONDS_PER_SECOND = 1_000;
 
 export interface SessionTtlPolicy {
-  readonly idleTtlSeconds: number;
-  readonly absoluteTtlSeconds: number;
+  readonly idleTtlSeconds: number; // ระยะเวลาสูงสุดที่อนุญาตให้ Session คงอยู่ได้ นับจากการใช้งานครั้งล่าสุด
+  readonly absoluteTtlSeconds: number; // ระยะเวลาสูงสุดที่ Session จะมีอายุอยู่ได้นับตั้งแต่สร้างขึ้น
 }
 
 export interface InitialSessionExpiration {
   readonly idleExpiresAt: Date;
   readonly absoluteExpiresAt: Date;
+}
+
+export function calculateRefreshedIdleExpiration(
+  now: Date,
+  absoluteExpiresAt: Date,
+  idleTtlSeconds: number,
+): Date {
+  return new Date(
+    Math.min(
+      addSeconds(now, idleTtlSeconds).getTime(),
+      absoluteExpiresAt.getTime(),
+    ),
+  );
 }
 
 export function calculateInitialSessionExpiration(

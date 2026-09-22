@@ -26,6 +26,14 @@ const httpUrlSchema = z
     { message: "must use http:// or https://" },
   ); //refine สร้าง validation rule เพิ่ม
 
+const webOriginSchema = httpUrlSchema.refine(
+  (value) => new URL(value).origin === value,
+  {
+    message:
+      "must be an exact origin without a path, query, fragment, or trailing slash",
+  },
+);
+
 const redisUrlSchema = z
   .string()
   .url()
@@ -68,7 +76,7 @@ export const environmentSchema = z
       .default("development"),
 
     API_PORT: portSchema.default(3000),
-    WEB_ORIGIN: httpUrlSchema,
+    WEB_ORIGIN: webOriginSchema,
     OPENAPI_ENABLED: booleanSchema.default(false),
     OPENAPI_UI_ENABLED: booleanSchema.default(false),
 
