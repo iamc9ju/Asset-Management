@@ -17,8 +17,8 @@ import {
   AUTH_SESSION_REPOSITORY,
   CREATE_LOGIN_SESSION_RESULT,
   type AuthSessionRepository,
-  type LoginClientContext,
 } from "../ports/auth-session-repository.port";
+import type { AuthClientContext } from "../ports/auth-client-context.port";
 import {
   ACCESS_TOKEN_SERVICE,
   type AccessTokenService,
@@ -51,7 +51,7 @@ export interface LoginCommand {
   readonly email: string;
   readonly password: string;
   readonly deviceLabel?: string;
-  readonly client: LoginClientContext;
+  readonly client: AuthClientContext;
 }
 
 export interface LoginResult {
@@ -173,7 +173,7 @@ export class LoginService {
   private async rejectLogin(
     targetUserId: string | null,
     reason: LoginFailureReason,
-    client: LoginClientContext,
+    client: AuthClientContext,
     occurredAt = this.clock.now(),
   ): Promise<never> {
     await this.authEventRepository.recordLoginFailure({

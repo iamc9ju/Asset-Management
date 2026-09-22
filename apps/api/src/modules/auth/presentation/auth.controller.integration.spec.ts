@@ -1,5 +1,6 @@
 import type { AddressInfo } from "node:net";
 import { type INestApplication } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { APP_FILTER } from "@nestjs/core";
 import { Test } from "@nestjs/testing";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
@@ -8,6 +9,7 @@ import { AuthenticateAccessTokenService } from "../application/services/authenti
 import type { AuthSessionConfig } from "../application/config/auth-session.config";
 import { AUTH_SESSION_CONFIG } from "../application/config/auth-session.config";
 import { LoginService } from "../application/services/login.service";
+import { RefreshSessionService } from "../application/services/refresh-session.service";
 import { CLOCK, type Clock } from "../application/ports/clock.port";
 import {
   AUTH_COOKIE,
@@ -28,18 +30,22 @@ import { createValidationPipe } from "../../../shared/http/validation/validation
 import { AuthController } from "./auth.controller";
 import { AuthCookieService } from "./auth-cookie.service";
 import { AccessTokenGuard } from "./guards/access-token.guard";
+import { AuthOriginGuard } from "./guards/auth-origin.guard";
 
 const NOW = new Date("2026-09-17T10:00:00.000Z");
 const REFRESH_EXPIRES_AT = new Date("2026-09-24T10:00:00.000Z");
+const TRUSTED_ORIGIN = "https://app.example.com";
 
 describe("AuthController integration", () => {
   let app: INestApplication;
   let baseUrl: string;
   let loginService: { execute: jest.Mock };
+  let refreshSessionService: { execute: jest.Mock };
   let authenticateAccessTokenService: { execute: jest.Mock };
 
   beforeAll(async () => {
     loginService = { execute: jest.fn() };
+    refreshSessionService = { execute: jest.fn() };
     authenticateAccessTokenService = { execute: jest.fn() };
     const sessionConfig: AuthSessionConfig = {
       idleTtlSeconds: 86_400,
@@ -51,14 +57,28 @@ describe("AuthController integration", () => {
       controllers: [AuthController],
       providers: [
         { provide: LoginService, useValue: loginService },
+        { provide: RefreshSessionService, useValue: refreshSessionService },
         {
           provide: AuthenticateAccessTokenService,
           useValue: authenticateAccessTokenService,
         },
         { provide: AUTH_SESSION_CONFIG, useValue: sessionConfig },
+        {
+          provide: ConfigService,
+          useValue: {
+            getOrThrow: jest.fn((key: string) => {
+              if (key === "WEB_ORIGIN") {
+                return TRUSTED_ORIGIN;
+              }
+
+              throw new Error(`Unexpected configuration key: ${key}`);
+            }),
+          },
+        },
         { provide: CLOCK, useValue: clock },
         AuthCookieService,
         AccessTokenGuard,
+        AuthOriginGuard,
         { provide: APP_FILTER, useClass: GlobalExceptionFilter },
       ],
     }).compile();
@@ -76,6 +96,7 @@ describe("AuthController integration", () => {
 
   beforeEach(() => {
     loginService.execute.mockReset();
+    refreshSessionService.execute.mockReset();
     authenticateAccessTokenService.execute.mockReset();
   });
 
@@ -175,6 +196,92 @@ describe("AuthController integration", () => {
     expect(loginService.execute).not.toHaveBeenCalled();
   });
 
+  it("rotates the refresh cookie and returns a new access token", async () => {
+    refreshSessionService.execute.mockResolvedValue({
+      accessToken: "rotated-access-token",
+      tokenType: AUTH_TOKEN_TYPE.BEARER,
+      expiresIn: 900,
+      refreshToken: "replacement-token-id.replacement-token-secret",
+      refreshTokenExpiresAt: REFRESH_EXPIRES_AT,
+    });
+
+    const response = await fetch(`${baseUrl}/api/v1/auth/refresh`, {
+      method: "POST",
+      headers: {
+        [AUTH_HTTP_HEADER.ORIGIN]: TRUSTED_ORIGIN,
+        [AUTH_HTTP_HEADER.COOKIE]: `${AUTH_COOKIE.SECURE_REFRESH_TOKEN_NAME}=current-token-id.current-token-secret`,
+        "user-agent": "Integration Browser",
+      },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("set-cookie")).toContain(
+      `${AUTH_COOKIE.SECURE_REFRESH_TOKEN_NAME}=replacement-token-id.replacement-token-secret`,
+    );
+    await expect(response.json()).resolves.toEqual({
+      data: {
+        access_token: "rotated-access-token",
+        token_type: AUTH_TOKEN_TYPE.BEARER,
+        expires_in: 900,
+      },
+    });
+    expect(refreshSessionService.execute).toHaveBeenCalledWith({
+      rawRefreshToken: "current-token-id.current-token-secret",
+      client: {
+        requestId: expect.any(String),
+        ipAddress: "127.0.0.1",
+        userAgent: "Integration Browser",
+      },
+    });
+  });
+
+  it("rejects an untrusted Origin before reading the refresh credential", async () => {
+    const response = await fetch(`${baseUrl}/api/v1/auth/refresh`, {
+      method: "POST",
+      headers: {
+        [AUTH_HTTP_HEADER.ORIGIN]: "https://attacker.example.com",
+        [AUTH_HTTP_HEADER.COOKIE]: `${AUTH_COOKIE.SECURE_REFRESH_TOKEN_NAME}=current-token-id.current-token-secret`,
+      },
+    });
+    const body = (await response.json()) as ErrorResponseEnvelope;
+
+    expect(response.status).toBe(403);
+    expect(body.error.code).toBe(APP_ERROR_CODE.FORBIDDEN);
+    expect(refreshSessionService.execute).not.toHaveBeenCalled();
+  });
+
+  it("clears an invalid refresh credential", async () => {
+    refreshSessionService.execute.mockRejectedValue(
+      new AppError(APP_ERROR_CODE.AUTH_SESSION_INVALID),
+    );
+
+    const response = await fetch(`${baseUrl}/api/v1/auth/refresh`, {
+      method: "POST",
+      headers: {
+        [AUTH_HTTP_HEADER.ORIGIN]: TRUSTED_ORIGIN,
+        [AUTH_HTTP_HEADER.COOKIE]: `${AUTH_COOKIE.SECURE_REFRESH_TOKEN_NAME}=invalid-token`,
+      },
+    });
+
+    expect(response.status).toBe(401);
+    expect(response.headers.get("set-cookie")).toContain(
+      `${AUTH_COOKIE.SECURE_REFRESH_TOKEN_NAME}=;`,
+    );
+  });
+
+  it("clears the cookie when the refresh credential is missing", async () => {
+    const response = await fetch(`${baseUrl}/api/v1/auth/refresh`, {
+      method: "POST",
+      headers: { [AUTH_HTTP_HEADER.ORIGIN]: TRUSTED_ORIGIN },
+    });
+
+    expect(response.status).toBe(401);
+    expect(response.headers.get("set-cookie")).toContain(
+      `${AUTH_COOKIE.SECURE_REFRESH_TOKEN_NAME}=;`,
+    );
+    expect(refreshSessionService.execute).not.toHaveBeenCalled();
+  });
+
   it("returns the current user from the authenticated identity", async () => {
     authenticateAccessTokenService.execute.mockResolvedValue({
       userId: "11111111-1111-4111-8111-111111111111",
@@ -254,6 +361,14 @@ describe("AuthController integration", () => {
       },
     });
     expect(operation?.responses["401"]).toBeDefined();
+
+    const refreshOperation = document.paths["/api/v1/auth/refresh"]?.post;
+    expect(refreshOperation).toBeDefined();
+    expect(refreshOperation?.security).toEqual([
+      { [OPENAPI_SECURITY_SCHEME.REFRESH_TOKEN]: [] },
+    ]);
+    expect(refreshOperation?.responses["401"]).toBeDefined();
+    expect(refreshOperation?.responses["403"]).toBeDefined();
 
     const meOperation = document.paths["/api/v1/auth/me"]?.get;
     expect(meOperation).toBeDefined();

@@ -18,9 +18,9 @@
 
 ## Current Focus
 
-### Authentication Phase 4 — Protected Requests
+### Authentication Phase 5 — Refresh-Token Rotation and Reuse Detection
 
-สถานะ: Authentication Phase 1–4, OpenAPI foundation, standard API response และ first-administrator bootstrap เสร็จและตรวจสอบแล้ว; ขั้นถัดไปคือ Phase 5 refresh-token rotation และ reuse detection
+สถานะ: Authentication Phase 1–5, OpenAPI foundation, standard API response และ first-administrator bootstrap เสร็จและตรวจสอบแล้ว; ขั้นถัดไปคือ Phase 6 logout และ session management
 
 - [x] Merge Initial Database Schema เข้าสู่ `main`
 - [x] เพิ่ม Authentication configuration และ cryptography foundation
@@ -39,6 +39,7 @@
 - [x] ตรวจ Authentication Phase 4A — Access Token Guard และ `GET /auth/me`
 - [x] ตรวจ Authentication Phase 4B — typed permission metadata, permission guard, OpenAPI และ current-permission behavior
 - [x] Authentication Phase 4 — Protected requests และ permission guards
+- [x] Authentication Phase 5 — Refresh-token rotation, reuse detection, trusted Origin และ cookie rotation
 
 ## Milestone Checklist
 
@@ -715,15 +716,65 @@ Architecture/technical decisions:
 
 - Authentication Phase 5 — Refresh-token rotation และ reuse detection
 
+### 2026-09-21 — Authentication Phase 5 — Refresh-Token Rotation and Reuse Detection
+
+สถานะ: เสร็จและตรวจสอบแล้ว
+
+เป้าหมายและขอบเขต:
+
+- เพิ่ม `POST /api/v1/auth/refresh` สำหรับ rotate one-time refresh token และออก access token ใหม่
+- ป้องกัน CSRF ด้วย exact trusted-Origin validation
+- ตรวจจับการนำ used/replaced/revoked token ที่พิสูจน์ secret ได้กลับมาใช้ และ revoke session/token family
+- ยังไม่รวม logout, session-management endpoints และ Redis rate limiting
+
+สิ่งที่ทำ:
+
+- เพิ่ม refresh application service และ transaction repository แยกตาม module boundary
+- parse opaque token รูปแบบ `<token-id>.<secret>` และเทียบ SHA-256 hash แบบ constant-time
+- lock refresh-token row และ session row ก่อนตรวจ/เปลี่ยน state เพื่อ serialize concurrent rotation
+- สร้าง successor ใน session เดิม, mark predecessor ว่าใช้แล้ว และเชื่อม parent/replacement chain
+- ขยาย session idle expiry โดย cap ที่ absolute expiry
+- บันทึก `TOKEN_REFRESHED` และ `REFRESH_TOKEN_REUSE_DETECTED` activity พร้อม request correlation
+- เพิ่ม cookie read/clear, trusted-Origin guard, OpenAPI cookie scheme และ focused `test:auth:refresh`
+- เพิ่ม unit/integration tests สำหรับ success, malformed/expired token, wrong secret, reuse incident และ concurrent attempts
+
+Architecture/technical decisions:
+
+- ตรวจ secret hash ก่อน reuse classification เพื่อไม่ให้ผู้โจมตีที่รู้เพียง token ID revoke session ได้
+- strict reuse detection revoke ทั้ง session family; concurrent client requests ที่ใช้ token เดียวกันจึงทำให้ session ถูก revoke หลังหนึ่ง request สำเร็จ ซึ่งเป็น security-first behavior
+- endpoint รับ credential จาก HttpOnly cookie เท่านั้นและไม่รับ refresh token จาก JSON body
+- `WEB_ORIGIN` ต้องเป็น exact HTTP origin ไม่มี path, query, fragment หรือ trailing slash
+- Access-token signing เกิดหลัง rotation transaction commit; หาก local signing ล้มเหลวในช่วงสั้น ๆ client จะไม่ได้ replacement cookie และต้อง login ใหม่ แต่ database/token integrity ยังคงปลอดภัย
+
+ผลการตรวจสอบ:
+
+- Formatter: Prettier ผ่านสำหรับไฟล์ใน Phase 5
+- Typecheck: `pnpm --filter @asset-management/api typecheck` ผ่าน
+- Focused tests: `pnpm --filter @asset-management/api test:auth:refresh` ผ่านทั้งหมด
+- Full API test suite: `pnpm --filter @asset-management/api test:all` ผ่านทั้งหมด
+- Production build: `pnpm --filter @asset-management/api build` ผ่าน
+- Neon verification: database integration tests ผ่านบน dedicated `Test_branch` โดยใช้ direct unpooled endpoint
+- Diff validation: ผ่าน
+
+สิ่งที่ยังไม่ครอบคลุมและความเสี่ยงคงเหลือ:
+
+- Redis login/refresh rate limiting ยังอยู่ใน Phase 7; authentication endpoints ยังไม่พร้อมเปิด public production traffic
+- Logout และ session-management endpoints อยู่ใน Phase 6
+- Strict reuse detection ต้องป้องกัน frontend เรียก refresh ซ้ำพร้อมกัน โดยใช้ single-flight refresh request ฝั่ง client
+
+งานถัดไป:
+
+- Authentication Phase 6 — Logout และ session management
+
 ## Blocked Items
 
 ยังไม่มีรายการที่บันทึก
 
 ## Next Recommended Tasks
 
-1. ทำ Authentication Phase 5 — Refresh-token rotation และ reuse detection
-2. ทำ Authentication Phase 6 — Logout และ session management
-3. ทำ Authentication Phase 7 — Rate limiting, audit และ cleanup
+1. ทำ Authentication Phase 6 — Logout และ session management
+2. ทำ Authentication Phase 7 — Rate limiting, audit และ cleanup
+3. เพิ่ม frontend authentication flow พร้อม single-flight refresh request
 
 ## Update Template
 

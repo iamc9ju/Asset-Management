@@ -59,6 +59,22 @@ describe("environmentSchema", () => {
     expect(result.AUTH_REFRESH_COOKIE_SECURE).toBe(false);
   });
 
+  it("requires WEB_ORIGIN to be an exact HTTP origin", () => {
+    expect(() =>
+      validateEnvironment({
+        ...VALID_ENVIRONMENT,
+        WEB_ORIGIN: "https://app.example.com/path",
+      }),
+    ).toThrow(/Environment validation failed: WEB_ORIGIN:/);
+
+    expect(() =>
+      validateEnvironment({
+        ...VALID_ENVIRONMENT,
+        WEB_ORIGIN: "https://app.example.com/",
+      }),
+    ).toThrow(/Environment validation failed: WEB_ORIGIN:/);
+  });
+
   it("disables OpenAPI endpoints by default", () => {
     const result = environmentSchema.parse(VALID_ENVIRONMENT);
 

@@ -1,8 +1,8 @@
 import type { RequestWithId } from "../../../shared/http/request-id/request-id.types";
 import { AUTH_CLIENT_METADATA_LIMIT } from "../domain/auth.constants";
-import { createLoginClientContext } from "./auth-request-context";
+import { createAuthClientContext } from "./auth-request-context";
 
-describe("createLoginClientContext", () => {
+describe("createAuthClientContext", () => {
   it("keeps only validated, bounded client metadata", () => {
     const userAgent = "a".repeat(
       AUTH_CLIENT_METADATA_LIMIT.USER_AGENT_LENGTH + 100,
@@ -14,7 +14,7 @@ describe("createLoginClientContext", () => {
         header === "user-agent" ? `  ${userAgent}  ` : undefined,
     } as unknown as RequestWithId;
 
-    expect(createLoginClientContext(request)).toEqual({
+    expect(createAuthClientContext(request)).toEqual({
       requestId: request.requestId,
       ipAddress: "127.0.0.1",
       userAgent: "a".repeat(AUTH_CLIENT_METADATA_LIMIT.USER_AGENT_LENGTH),
@@ -28,7 +28,7 @@ describe("createLoginClientContext", () => {
       get: () => "   ",
     } as unknown as RequestWithId;
 
-    expect(createLoginClientContext(request)).toEqual({
+    expect(createAuthClientContext(request)).toEqual({
       requestId: request.requestId,
       ipAddress: null,
       userAgent: null,

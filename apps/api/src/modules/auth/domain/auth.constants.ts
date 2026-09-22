@@ -4,6 +4,8 @@ export const AUTH_TOKEN_TYPE = {
 
 export const AUTH_HTTP_HEADER = {
   AUTHORIZATION: "authorization",
+  COOKIE: "cookie",
+  ORIGIN: "origin",
   WWW_AUTHENTICATE: "WWW-Authenticate",
 } as const;
 
@@ -21,4 +23,8 @@ export const AUTH_CLIENT_METADATA_LIMIT = {
 export const AUTH_CREDENTIAL_LIMIT = {
   EMAIL_LENGTH: 320,
   PASSWORD_LENGTH: 1_024,
+} as const;
+
+export const AUTH_SESSION_REVOKE_REASON = {
+  REFRESH_TOKEN_REUSE: "REFRESH_TOKEN_REUSE",
 } as const;
