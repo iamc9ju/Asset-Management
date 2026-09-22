@@ -1,3 +1,5 @@
+import type { AuthClientContext } from "./auth-client-context.port";
+
 export const AUTH_SESSION_REPOSITORY = Symbol("AUTH_SESSION_REPOSITORY");
 
 export const CREATE_LOGIN_SESSION_RESULT = {
@@ -8,12 +10,6 @@ export const CREATE_LOGIN_SESSION_RESULT = {
 export type CreateLoginSessionResult =
   (typeof CREATE_LOGIN_SESSION_RESULT)[keyof typeof CREATE_LOGIN_SESSION_RESULT];
 
-export interface LoginClientContext {
-  readonly requestId: string;
-  readonly ipAddress: string | null;
-  readonly userAgent: string | null;
-}
-
 export interface CreateLoginSessionInput {
   readonly sessionId: string;
   readonly userId: string;
@@ -23,7 +19,7 @@ export interface CreateLoginSessionInput {
   readonly refreshTokenId: string;
   readonly refreshTokenHash: string;
   readonly occurredAt: Date;
-  readonly client: LoginClientContext;
+  readonly client: AuthClientContext;
 }
 
 export interface AuthSessionRepository {

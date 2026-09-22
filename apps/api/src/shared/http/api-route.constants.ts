@@ -4,6 +4,7 @@ export const API_ROUTE = {
   AUTH: {
     BASE: "auth",
     LOGIN: "login",
+    REFRESH: "refresh",
     ME: "me",
   },
 } as const;

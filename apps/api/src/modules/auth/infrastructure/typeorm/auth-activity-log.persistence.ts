@@ -4,7 +4,7 @@ import {
   AUTH_EVENT_ACTION,
   type LoginFailureReason,
 } from "../../application/ports/auth-event.port";
-import type { LoginClientContext } from "../../application/ports/auth-session-repository.port";
+import type { AuthClientContext } from "../../application/ports/auth-client-context.port";
 
 const ACTIVITY_ACTOR_TYPE = {
   USER: "USER",
@@ -25,14 +25,21 @@ interface InsertLoginSuccessActivityInput {
   readonly userId: string;
   readonly sessionId: string;
   readonly occurredAt: Date;
-  readonly client: LoginClientContext;
+  readonly client: AuthClientContext;
 }
 
 interface InsertLoginFailureActivityInput {
   readonly targetUserId: string | null;
   readonly reason: LoginFailureReason;
   readonly occurredAt: Date;
-  readonly client: LoginClientContext;
+  readonly client: AuthClientContext;
+}
+
+interface InsertRefreshActivityInput {
+  readonly userId: string;
+  readonly sessionId: string;
+  readonly occurredAt: Date;
+  readonly client: AuthClientContext;
 }
 
 export async function insertLoginSuccessActivity(
@@ -69,6 +76,40 @@ export async function insertLoginFailureActivity(
   });
 }
 
+export async function insertTokenRefreshedActivity(
+  manager: EntityManager,
+  input: InsertRefreshActivityInput,
+): Promise<void> {
+  await insertActivity(manager, {
+    actorUserId: input.userId,
+    actorType: ACTIVITY_ACTOR_TYPE.USER,
+    action: AUTH_EVENT_ACTION.TOKEN_REFRESHED,
+    entityType: ACTIVITY_ENTITY_TYPE.AUTH_SESSION,
+    entityId: input.sessionId,
+    metadata: {},
+    outcome: ACTIVITY_OUTCOME.SUCCESS,
+    occurredAt: input.occurredAt,
+    client: input.client,
+  });
+}
+
+export async function insertRefreshTokenReuseActivity(
+  manager: EntityManager,
+  input: InsertRefreshActivityInput,
+): Promise<void> {
+  await insertActivity(manager, {
+    actorUserId: input.userId,
+    actorType: ACTIVITY_ACTOR_TYPE.USER,
+    action: AUTH_EVENT_ACTION.REFRESH_TOKEN_REUSE_DETECTED,
+    entityType: ACTIVITY_ENTITY_TYPE.AUTH_SESSION,
+    entityId: input.sessionId,
+    metadata: {},
+    outcome: ACTIVITY_OUTCOME.DENIED,
+    occurredAt: input.occurredAt,
+    client: input.client,
+  });
+}
+
 interface InsertActivityInput {
   readonly actorUserId: string | null;
   readonly actorType: (typeof ACTIVITY_ACTOR_TYPE)[keyof typeof ACTIVITY_ACTOR_TYPE];
@@ -78,7 +119,7 @@ interface InsertActivityInput {
   readonly metadata: Readonly<Record<string, unknown>>;
   readonly outcome: (typeof ACTIVITY_OUTCOME)[keyof typeof ACTIVITY_OUTCOME];
   readonly occurredAt: Date;
-  readonly client: LoginClientContext;
+  readonly client: AuthClientContext;
 }
 
 async function insertActivity(
