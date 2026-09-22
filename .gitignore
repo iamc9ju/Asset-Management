@@ -1,6 +1,10 @@
 .DS_Store
 .idea/
 
+# Local-only project guidance and documentation
+/AGENTS.md
+/docs/
+
 # Local environment and package-manager credentials
 .env
 .env.*
