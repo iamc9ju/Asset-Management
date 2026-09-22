@@ -11,10 +11,14 @@ import {
 } from "../../../../database/testing/test-database";
 import { LOGIN_FAILURE_REASON } from "../../application/ports/auth-event.port";
 import { CREATE_LOGIN_SESSION_RESULT } from "../../application/ports/auth-session-repository.port";
+import { ROTATE_REFRESH_SESSION_RESULT } from "../../application/ports/refresh-session-repository.port";
+import { AUTH_SESSION_REVOKE_REASON } from "../../domain/auth.constants";
 import { UserOrmEntity } from "../../../iam/infrastructure/typeorm/entities/user.orm-entity";
+import { OpaqueRefreshTokenService } from "../crypto/opaque-refresh-token.service";
 import { TypeOrmAuthEventRepository } from "./auth-event.repository";
 import { TypeOrmAuthSessionQueryRepository } from "./auth-session-query.repository";
 import { TypeOrmAuthSessionRepository } from "./auth-session.repository";
+import { TypeOrmRefreshSessionRepository } from "./refresh-session.repository";
 import { AuthRefreshTokenOrmEntity } from "./entities/auth-refresh-token.orm-entity";
 import { AuthSessionOrmEntity } from "./entities/auth-session.orm-entity";
 
@@ -33,6 +37,7 @@ describeWithDatabase("TypeOrmAuthSessionRepository integration", () => {
 
   let dataSource: DataSource;
   let repository: TypeOrmAuthSessionRepository;
+  let refreshRepository: TypeOrmRefreshSessionRepository;
   let sessionQueryRepository: TypeOrmAuthSessionQueryRepository;
   let eventRepository: TypeOrmAuthEventRepository;
   let schemaCreated = false;
@@ -99,6 +104,10 @@ describeWithDatabase("TypeOrmAuthSessionRepository integration", () => {
     await queryRunner.release();
 
     repository = new TypeOrmAuthSessionRepository(dataSource);
+    refreshRepository = new TypeOrmRefreshSessionRepository(
+      dataSource,
+      new OpaqueRefreshTokenService(),
+    );
     sessionQueryRepository = new TypeOrmAuthSessionQueryRepository(
       dataSource.getRepository(AuthSessionOrmEntity),
     );
@@ -181,6 +190,31 @@ describeWithDatabase("TypeOrmAuthSessionRepository integration", () => {
         requestId: randomUUID(),
         ipAddress: "127.0.0.1",
         userAgent: "Repository integration test",
+      },
+    };
+  }
+
+  function createRotationInput(
+    input: ReturnType<typeof createInput>,
+    overrides: Partial<{
+      currentTokenHash: string;
+      replacementTokenId: string;
+      replacementTokenHash: string;
+      occurredAt: Date;
+      requestId: string;
+    }> = {},
+  ) {
+    return {
+      currentTokenId: input.refreshTokenId,
+      currentTokenHash: overrides.currentTokenHash ?? input.refreshTokenHash,
+      replacementTokenId: overrides.replacementTokenId ?? randomUUID(),
+      replacementTokenHash: overrides.replacementTokenHash ?? "b".repeat(64),
+      idleTtlSeconds: 604_800,
+      occurredAt: overrides.occurredAt ?? new Date("2026-09-18T08:00:00.000Z"),
+      client: {
+        requestId: overrides.requestId ?? randomUUID(),
+        ipAddress: "127.0.0.2",
+        userAgent: "Refresh repository integration test",
       },
     };
   }
@@ -332,5 +366,204 @@ describeWithDatabase("TypeOrmAuthSessionRepository integration", () => {
     });
     expect(JSON.stringify(activity)).not.toContain("password");
     expect(JSON.stringify(activity)).not.toContain("@example.com");
+  });
+
+  it("rotates a refresh token and extends idle expiry atomically", async () => {
+    const userId = await insertUser();
+    const loginInput = createInput(userId);
+    await repository.createLoginSession(loginInput);
+    const rotationInput = createRotationInput(loginInput);
+
+    await expect(refreshRepository.rotate(rotationInput)).resolves.toEqual({
+      status: ROTATE_REFRESH_SESSION_RESULT.ROTATED,
+      userId,
+      sessionId: loginInput.sessionId,
+      refreshTokenExpiresAt: ABSOLUTE_EXPIRES_AT,
+    });
+
+    const [oldToken] = (await dataSource.query(
+      "SELECT used_at, replaced_by_token_id, ip_used FROM auth_refresh_tokens WHERE id = $1",
+      [loginInput.refreshTokenId],
+    )) as Array<Record<string, unknown>>;
+    const [replacement] = (await dataSource.query(
+      "SELECT session_id, parent_token_id, token_hash, expires_at FROM auth_refresh_tokens WHERE id = $1",
+      [rotationInput.replacementTokenId],
+    )) as Array<Record<string, unknown>>;
+    const [session] = (await dataSource.query(
+      "SELECT last_used_at, idle_expires_at, revoked_at FROM auth_sessions WHERE id = $1",
+      [loginInput.sessionId],
+    )) as Array<Record<string, unknown>>;
+    const [activity] = (await dataSource.query(
+      "SELECT action, outcome, request_id FROM activity_logs WHERE request_id = $1",
+      [rotationInput.client.requestId],
+    )) as Array<Record<string, unknown>>;
+
+    expect(oldToken).toMatchObject({
+      used_at: rotationInput.occurredAt,
+      replaced_by_token_id: rotationInput.replacementTokenId,
+      ip_used: "127.0.0.2",
+    });
+    expect(replacement).toMatchObject({
+      session_id: loginInput.sessionId,
+      parent_token_id: loginInput.refreshTokenId,
+      token_hash: rotationInput.replacementTokenHash,
+      expires_at: ABSOLUTE_EXPIRES_AT,
+    });
+    expect(session).toMatchObject({
+      last_used_at: rotationInput.occurredAt,
+      idle_expires_at: new Date("2026-09-25T08:00:00.000Z"),
+      revoked_at: null,
+    });
+    expect(activity).toEqual({
+      action: "TOKEN_REFRESHED",
+      outcome: "SUCCESS",
+      request_id: rotationInput.client.requestId,
+    });
+  });
+
+  it("does not revoke a session when the selector exists but the secret hash is wrong", async () => {
+    const userId = await insertUser();
+    const loginInput = createInput(userId);
+    await repository.createLoginSession(loginInput);
+    const rotationInput = createRotationInput(loginInput, {
+      currentTokenHash: "f".repeat(64),
+    });
+
+    await expect(refreshRepository.rotate(rotationInput)).resolves.toEqual({
+      status: ROTATE_REFRESH_SESSION_RESULT.INVALID,
+    });
+
+    const [session] = (await dataSource.query(
+      "SELECT revoked_at, revoke_reason FROM auth_sessions WHERE id = $1",
+      [loginInput.sessionId],
+    )) as Array<Record<string, unknown>>;
+    const tokenCountRows = (await dataSource.query(
+      "SELECT count(*)::int AS count FROM auth_refresh_tokens WHERE session_id = $1",
+      [loginInput.sessionId],
+    )) as Array<{ count: number }>;
+
+    expect(session).toEqual({ revoked_at: null, revoke_reason: null });
+    expect(tokenCountRows[0]).toEqual({ count: 1 });
+  });
+
+  it("rolls back the rotation when successor persistence fails", async () => {
+    const userId = await insertUser();
+    const loginInput = createInput(userId);
+    await repository.createLoginSession(loginInput);
+    const rotationInput = createRotationInput(loginInput, {
+      replacementTokenHash: loginInput.refreshTokenHash,
+    });
+    const [sessionBeforeRotation] = (await dataSource.query(
+      "SELECT last_used_at, idle_expires_at FROM auth_sessions WHERE id = $1",
+      [loginInput.sessionId],
+    )) as Array<Record<string, unknown>>;
+
+    await expect(refreshRepository.rotate(rotationInput)).rejects.toBeDefined();
+
+    const [token] = (await dataSource.query(
+      "SELECT used_at, replaced_by_token_id FROM auth_refresh_tokens WHERE id = $1",
+      [loginInput.refreshTokenId],
+    )) as Array<Record<string, unknown>>;
+    const [session] = (await dataSource.query(
+      "SELECT last_used_at, idle_expires_at FROM auth_sessions WHERE id = $1",
+      [loginInput.sessionId],
+    )) as Array<Record<string, unknown>>;
+    const activityCountRows = (await dataSource.query(
+      "SELECT count(*)::int AS count FROM activity_logs WHERE request_id = $1",
+      [rotationInput.client.requestId],
+    )) as Array<{ count: number }>;
+
+    expect(token).toEqual({ used_at: null, replaced_by_token_id: null });
+    expect(session).toEqual(sessionBeforeRotation);
+    expect(activityCountRows[0]).toEqual({ count: 0 });
+  });
+
+  it("revokes the entire token family when an authenticated used token is presented again", async () => {
+    const userId = await insertUser();
+    const loginInput = createInput(userId);
+    await repository.createLoginSession(loginInput);
+    const firstRotation = createRotationInput(loginInput);
+    await refreshRepository.rotate(firstRotation);
+    const reuseOccurredAt = new Date("2026-09-18T08:01:00.000Z");
+    const reuseInput = createRotationInput(loginInput, {
+      replacementTokenId: randomUUID(),
+      replacementTokenHash: "c".repeat(64),
+      occurredAt: reuseOccurredAt,
+    });
+
+    await expect(refreshRepository.rotate(reuseInput)).resolves.toEqual({
+      status: ROTATE_REFRESH_SESSION_RESULT.REUSED,
+    });
+
+    const [session] = (await dataSource.query(
+      "SELECT revoked_at, revoke_reason FROM auth_sessions WHERE id = $1",
+      [loginInput.sessionId],
+    )) as Array<Record<string, unknown>>;
+    const tokens = (await dataSource.query(
+      "SELECT revoked_at FROM auth_refresh_tokens WHERE session_id = $1 ORDER BY issued_at",
+      [loginInput.sessionId],
+    )) as Array<Record<string, unknown>>;
+    const [activity] = (await dataSource.query(
+      "SELECT action, outcome FROM activity_logs WHERE request_id = $1",
+      [reuseInput.client.requestId],
+    )) as Array<Record<string, unknown>>;
+
+    expect(session).toEqual({
+      revoked_at: reuseOccurredAt,
+      revoke_reason: AUTH_SESSION_REVOKE_REASON.REFRESH_TOKEN_REUSE,
+    });
+    expect(tokens).toHaveLength(2);
+    expect(tokens).toEqual([
+      { revoked_at: reuseOccurredAt },
+      { revoked_at: reuseOccurredAt },
+    ]);
+    expect(activity).toEqual({
+      action: "REFRESH_TOKEN_REUSE_DETECTED",
+      outcome: "DENIED",
+    });
+  });
+
+  it("allows only one rotation attempt to succeed for the same current token", async () => {
+    const userId = await insertUser();
+    const loginInput = createInput(userId);
+    await repository.createLoginSession(loginInput);
+    const firstInput = createRotationInput(loginInput, {
+      replacementTokenHash: "b".repeat(64),
+    });
+    const secondInput = createRotationInput(loginInput, {
+      replacementTokenHash: "c".repeat(64),
+      occurredAt: new Date(firstInput.occurredAt.getTime() - 1),
+    });
+
+    const results = await Promise.all([
+      refreshRepository.rotate(firstInput),
+      refreshRepository.rotate(secondInput),
+    ]);
+
+    expect(results.map((result) => result.status).sort()).toEqual(
+      [
+        ROTATE_REFRESH_SESSION_RESULT.REUSED,
+        ROTATE_REFRESH_SESSION_RESULT.ROTATED,
+      ].sort(),
+    );
+  });
+
+  it("rejects an expired idle window without creating a successor", async () => {
+    const userId = await insertUser();
+    const loginInput = createInput(userId);
+    await repository.createLoginSession(loginInput);
+    const rotationInput = createRotationInput(loginInput, {
+      occurredAt: IDLE_EXPIRES_AT,
+    });
+
+    await expect(refreshRepository.rotate(rotationInput)).resolves.toEqual({
+      status: ROTATE_REFRESH_SESSION_RESULT.EXPIRED,
+    });
+
+    const tokenCountRows = (await dataSource.query(
+      "SELECT count(*)::int AS count FROM auth_refresh_tokens WHERE session_id = $1",
+      [loginInput.sessionId],
+    )) as Array<{ count: number }>;
+    expect(tokenCountRows[0]).toEqual({ count: 1 });
   });
 });

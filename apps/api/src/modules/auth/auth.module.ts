@@ -6,12 +6,14 @@ import { ACCESS_TOKEN_SERVICE } from "./application/ports/access-token.port";
 import { AUTH_EVENT_REPOSITORY } from "./application/ports/auth-event.port";
 import { AUTH_SESSION_QUERY } from "./application/ports/auth-session-query.port";
 import { AUTH_SESSION_REPOSITORY } from "./application/ports/auth-session-repository.port";
+import { REFRESH_SESSION_REPOSITORY } from "./application/ports/refresh-session-repository.port";
 import { CLOCK } from "./application/ports/clock.port";
 import { IDENTIFIER_GENERATOR } from "./application/ports/identifier-generator.port";
 import { PASSWORD_HASHER } from "./application/ports/password-hasher.port";
 import { REFRESH_TOKEN_SERVICE } from "./application/ports/refresh-token.port";
 import { AuthenticateAccessTokenService } from "./application/services/authenticate-access-token.service";
 import { LoginService } from "./application/services/login.service";
+import { RefreshSessionService } from "./application/services/refresh-session.service";
 import { accessTokenConfigProvider } from "./infrastructure/config/access-token-config.provider";
 import { authSessionConfigProvider } from "./infrastructure/config/auth-session-config.provider";
 import { Argon2PasswordHasher } from "./infrastructure/crypto/argon2-password-hasher";
@@ -22,11 +24,13 @@ import { SystemClock } from "./infrastructure/time/system-clock";
 import { TypeOrmAuthEventRepository } from "./infrastructure/typeorm/auth-event.repository";
 import { TypeOrmAuthSessionQueryRepository } from "./infrastructure/typeorm/auth-session-query.repository";
 import { TypeOrmAuthSessionRepository } from "./infrastructure/typeorm/auth-session.repository";
+import { TypeOrmRefreshSessionRepository } from "./infrastructure/typeorm/refresh-session.repository";
 import { AuthRefreshTokenOrmEntity } from "./infrastructure/typeorm/entities/auth-refresh-token.orm-entity";
 import { AuthSessionOrmEntity } from "./infrastructure/typeorm/entities/auth-session.orm-entity";
 import { AuthController } from "./presentation/auth.controller";
 import { AuthCookieService } from "./presentation/auth-cookie.service";
 import { AccessTokenGuard } from "./presentation/guards/access-token.guard";
+import { AuthOriginGuard } from "./presentation/guards/auth-origin.guard";
 import { PermissionGuard } from "./presentation/guards/permission.guard";
 
 @Module({
@@ -64,6 +68,10 @@ import { PermissionGuard } from "./presentation/guards/permission.guard";
       useClass: TypeOrmAuthSessionRepository,
     },
     {
+      provide: REFRESH_SESSION_REPOSITORY,
+      useClass: TypeOrmRefreshSessionRepository,
+    },
+    {
       provide: AUTH_SESSION_QUERY,
       useClass: TypeOrmAuthSessionQueryRepository,
     },
@@ -72,9 +80,11 @@ import { PermissionGuard } from "./presentation/guards/permission.guard";
       useClass: TypeOrmAuthEventRepository,
     },
     LoginService,
+    RefreshSessionService,
     AuthenticateAccessTokenService,
     AuthCookieService,
     AccessTokenGuard,
+    AuthOriginGuard,
     PermissionGuard,
   ],
   exports: [

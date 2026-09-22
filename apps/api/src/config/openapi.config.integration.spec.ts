@@ -52,6 +52,7 @@ describe("OpenAPI configuration integration", () => {
     const values: Record<string, boolean> = {
       OPENAPI_ENABLED: true,
       OPENAPI_UI_ENABLED: false,
+      AUTH_REFRESH_COOKIE_SECURE: true,
     };
     const config = {
       getOrThrow: jest.fn((key: string) => values[key]),
@@ -85,6 +86,14 @@ describe("OpenAPI configuration integration", () => {
     expect(document.paths).toHaveProperty(`/${API_GLOBAL_PREFIX}/openapi-test`);
     expect(document.components?.securitySchemes).toHaveProperty(
       OPENAPI_SECURITY_SCHEME.ACCESS_TOKEN,
+    );
+    expect(document.components?.securitySchemes).toHaveProperty(
+      OPENAPI_SECURITY_SCHEME.REFRESH_TOKEN,
+      expect.objectContaining({
+        type: "apiKey",
+        in: "cookie",
+        name: "__Secure-am_refresh",
+      }),
     );
   });
 });

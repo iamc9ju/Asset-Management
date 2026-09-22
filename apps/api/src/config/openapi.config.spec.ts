@@ -54,6 +54,7 @@ describe("configureOpenApi", () => {
         createConfigService({
           OPENAPI_ENABLED: true,
           OPENAPI_UI_ENABLED: false,
+          AUTH_REFRESH_COOKIE_SECURE: true,
         }),
       ),
     ).toBe(true);
@@ -86,6 +87,11 @@ describe("configureOpenApi", () => {
         components: expect.objectContaining({
           securitySchemes: expect.objectContaining({
             [OPENAPI_SECURITY_SCHEME.ACCESS_TOKEN]: expect.any(Object),
+            [OPENAPI_SECURITY_SCHEME.REFRESH_TOKEN]: expect.objectContaining({
+              type: "apiKey",
+              in: "cookie",
+              name: "__Secure-am_refresh",
+            }),
           }),
         }),
       }),

@@ -12,6 +12,9 @@ import {
 import {
   ApiBadRequestResponse,
   ApiBearerAuth,
+  ApiCookieAuth,
+  ApiForbiddenResponse,
+  ApiHeader,
   ApiInternalServerErrorResponse,
   ApiOperation,
   ApiProduces,
@@ -19,6 +22,11 @@ import {
   ApiUnauthorizedResponse,
 } from "@nestjs/swagger";
 import type { Response } from "express";
+import {
+  APP_ERROR_CODE,
+  type AppErrorCode,
+} from "../../../shared/errors/app-error-code";
+import { AppError } from "../../../shared/errors/app-error";
 import { API_ROUTE } from "../../../shared/http/api-route.constants";
 import { ApiDataResponseDocumentation } from "../../../shared/http/openapi/api-response.openapi";
 import { ErrorResponseEnvelopeOpenApi } from "../../../shared/http/openapi/error-response.openapi";
@@ -27,15 +35,22 @@ import type { RequestWithId } from "../../../shared/http/request-id/request-id.t
 import { createApiDataResponse } from "../../../shared/http/responses/api-response.factory";
 import type { ApiDataResponse } from "../../../shared/http/responses/api-response.types";
 import { LoginService } from "../application/services/login.service";
+import { RefreshSessionService } from "../application/services/refresh-session.service";
 import type { AuthenticatedIdentity } from "../domain/authenticated-identity";
 import { AUTH_HTTP_HEADER, AUTH_TOKEN_TYPE } from "../domain/auth.constants";
-import { createLoginClientContext } from "./auth-request-context";
+import { createAuthClientContext } from "./auth-request-context";
 import { AuthCookieService } from "./auth-cookie.service";
 import { CurrentIdentity } from "./decorators/current-identity.decorator";
 import { LoginRequestDto } from "./dto/login.request";
 import { LoginResponseDataDto } from "./dto/login.response";
 import { MeResponseDataDto } from "./dto/me.response";
 import { AccessTokenGuard } from "./guards/access-token.guard";
+import { AuthOriginGuard } from "./guards/auth-origin.guard";
+
+const REFRESH_CREDENTIAL_ERROR_CODES: ReadonlySet<AppErrorCode> = new Set([
+  APP_ERROR_CODE.AUTH_SESSION_INVALID,
+  APP_ERROR_CODE.AUTH_SESSION_EXPIRED,
+]);
 
 @ApiTags("Authentication")
 @ApiProduces("application/json")
@@ -43,6 +58,7 @@ import { AccessTokenGuard } from "./guards/access-token.guard";
 export class AuthController {
   constructor(
     private readonly loginService: LoginService,
+    private readonly refreshSessionService: RefreshSessionService,
     private readonly authCookieService: AuthCookieService,
   ) {}
 
@@ -78,7 +94,7 @@ export class AuthController {
       email: body.email,
       password: body.password,
       deviceLabel: body.device_label,
-      client: createLoginClientContext(request),
+      client: createAuthClientContext(request),
     });
 
     this.authCookieService.setRefreshToken(
@@ -92,6 +108,85 @@ export class AuthController {
       token_type: result.tokenType,
       expires_in: result.expiresIn,
     });
+  }
+
+  @Post(API_ROUTE.AUTH.REFRESH)
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(AuthOriginGuard)
+  @ApiCookieAuth(OPENAPI_SECURITY_SCHEME.REFRESH_TOKEN)
+  @ApiHeader({
+    name: "Origin",
+    required: true,
+    description: "Must exactly match the configured trusted Web origin.",
+  })
+  @ApiOperation({
+    summary: "Rotate the refresh token and issue a new access token",
+    description:
+      "Consumes the HttpOnly refresh-token cookie exactly once and replaces it after a successful transaction.",
+  })
+  @ApiDataResponseDocumentation({
+    model: LoginResponseDataDto,
+    headers: {
+      "Set-Cookie": {
+        description: "Replacement HttpOnly refresh-token cookie.",
+        schema: { type: "string" },
+      },
+    },
+  })
+  @ApiForbiddenResponse({
+    type: ErrorResponseEnvelopeOpenApi,
+    description: "The request Origin is missing or is not trusted.",
+  })
+  @ApiUnauthorizedResponse({
+    type: ErrorResponseEnvelopeOpenApi,
+    description:
+      "The refresh credential or its server-side session is invalid or expired.",
+    headers: {
+      "Set-Cookie": {
+        description: "Clears the unusable refresh-token cookie.",
+        schema: { type: "string" },
+      },
+    },
+  })
+  @ApiInternalServerErrorResponse({ type: ErrorResponseEnvelopeOpenApi })
+  async refresh(
+    @Req() request: RequestWithId,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<ApiDataResponse<LoginResponseDataDto>> {
+    const rawRefreshToken = this.authCookieService.readRefreshToken(request);
+
+    if (!rawRefreshToken) {
+      this.authCookieService.clearRefreshToken(response);
+      throw new AppError(APP_ERROR_CODE.AUTH_SESSION_INVALID);
+    }
+
+    try {
+      const result = await this.refreshSessionService.execute({
+        rawRefreshToken,
+        client: createAuthClientContext(request),
+      });
+
+      this.authCookieService.setRefreshToken(
+        response,
+        result.refreshToken,
+        result.refreshTokenExpiresAt,
+      );
+
+      return createApiDataResponse({
+        access_token: result.accessToken,
+        token_type: result.tokenType,
+        expires_in: result.expiresIn,
+      });
+    } catch (error) {
+      if (
+        error instanceof AppError &&
+        REFRESH_CREDENTIAL_ERROR_CODES.has(error.code)
+      ) {
+        this.authCookieService.clearRefreshToken(response);
+      }
+
+      throw error;
+    }
   }
 
   @Get(API_ROUTE.AUTH.ME)
