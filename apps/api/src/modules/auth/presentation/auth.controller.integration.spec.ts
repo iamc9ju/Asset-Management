@@ -9,7 +9,11 @@ import { AuthenticateAccessTokenService } from "../application/services/authenti
 import type { AuthSessionConfig } from "../application/config/auth-session.config";
 import { AUTH_SESSION_CONFIG } from "../application/config/auth-session.config";
 import { LoginService } from "../application/services/login.service";
+import { ListAuthSessionsService } from "../application/services/list-auth-sessions.service";
+import { LogoutService } from "../application/services/logout.service";
 import { RefreshSessionService } from "../application/services/refresh-session.service";
+import { RevokeAllAuthSessionsService } from "../application/services/revoke-all-auth-sessions.service";
+import { RevokeAuthSessionService } from "../application/services/revoke-auth-session.service";
 import { CLOCK, type Clock } from "../application/ports/clock.port";
 import {
   AUTH_COOKIE,
@@ -31,21 +35,41 @@ import { AuthController } from "./auth.controller";
 import { AuthCookieService } from "./auth-cookie.service";
 import { AccessTokenGuard } from "./guards/access-token.guard";
 import { AuthOriginGuard } from "./guards/auth-origin.guard";
+import { LogoutOriginGuard } from "./guards/logout-origin.guard";
 
 const NOW = new Date("2026-09-17T10:00:00.000Z");
 const REFRESH_EXPIRES_AT = new Date("2026-09-24T10:00:00.000Z");
 const TRUSTED_ORIGIN = "https://app.example.com";
+const USER_ID = "11111111-1111-4111-8111-111111111111";
+const CURRENT_SESSION_ID = "22222222-2222-4222-8222-222222222222";
+const OTHER_SESSION_ID = "33333333-3333-4333-8333-333333333333";
+const AUTHENTICATED_IDENTITY = {
+  userId: USER_ID,
+  sessionId: CURRENT_SESSION_ID,
+  displayName: "System Administrator",
+  status: USER_STATUS.ACTIVE,
+  permissionVersion: "3",
+  permissionCodes: [PERMISSION_CODE.ASSET_READ, PERMISSION_CODE.USER_READ],
+} as const;
 
 describe("AuthController integration", () => {
   let app: INestApplication;
   let baseUrl: string;
   let loginService: { execute: jest.Mock };
   let refreshSessionService: { execute: jest.Mock };
+  let logoutService: { execute: jest.Mock };
+  let listAuthSessionsService: { execute: jest.Mock };
+  let revokeAuthSessionService: { execute: jest.Mock };
+  let revokeAllAuthSessionsService: { execute: jest.Mock };
   let authenticateAccessTokenService: { execute: jest.Mock };
 
   beforeAll(async () => {
     loginService = { execute: jest.fn() };
     refreshSessionService = { execute: jest.fn() };
+    logoutService = { execute: jest.fn() };
+    listAuthSessionsService = { execute: jest.fn() };
+    revokeAuthSessionService = { execute: jest.fn() };
+    revokeAllAuthSessionsService = { execute: jest.fn() };
     authenticateAccessTokenService = { execute: jest.fn() };
     const sessionConfig: AuthSessionConfig = {
       idleTtlSeconds: 86_400,
@@ -58,6 +82,19 @@ describe("AuthController integration", () => {
       providers: [
         { provide: LoginService, useValue: loginService },
         { provide: RefreshSessionService, useValue: refreshSessionService },
+        { provide: LogoutService, useValue: logoutService },
+        {
+          provide: ListAuthSessionsService,
+          useValue: listAuthSessionsService,
+        },
+        {
+          provide: RevokeAuthSessionService,
+          useValue: revokeAuthSessionService,
+        },
+        {
+          provide: RevokeAllAuthSessionsService,
+          useValue: revokeAllAuthSessionsService,
+        },
         {
           provide: AuthenticateAccessTokenService,
           useValue: authenticateAccessTokenService,
@@ -79,6 +116,7 @@ describe("AuthController integration", () => {
         AuthCookieService,
         AccessTokenGuard,
         AuthOriginGuard,
+        LogoutOriginGuard,
         { provide: APP_FILTER, useClass: GlobalExceptionFilter },
       ],
     }).compile();
@@ -97,6 +135,10 @@ describe("AuthController integration", () => {
   beforeEach(() => {
     loginService.execute.mockReset();
     refreshSessionService.execute.mockReset();
+    logoutService.execute.mockReset();
+    listAuthSessionsService.execute.mockReset();
+    revokeAuthSessionService.execute.mockReset();
+    revokeAllAuthSessionsService.execute.mockReset();
     authenticateAccessTokenService.execute.mockReset();
   });
 
@@ -282,15 +324,64 @@ describe("AuthController integration", () => {
     expect(refreshSessionService.execute).not.toHaveBeenCalled();
   });
 
-  it("returns the current user from the authenticated identity", async () => {
-    authenticateAccessTokenService.execute.mockResolvedValue({
-      userId: "11111111-1111-4111-8111-111111111111",
-      sessionId: "22222222-2222-4222-8222-222222222222",
-      displayName: "System Administrator",
-      status: USER_STATUS.ACTIVE,
-      permissionVersion: "3",
-      permissionCodes: [PERMISSION_CODE.ASSET_READ, PERMISSION_CODE.USER_READ],
+  it("logs out a refresh-token session, clears the cookie, and returns no content", async () => {
+    logoutService.execute.mockResolvedValue(undefined);
+
+    const response = await fetch(`${baseUrl}/api/v1/auth/logout`, {
+      method: "POST",
+      headers: {
+        [AUTH_HTTP_HEADER.ORIGIN]: TRUSTED_ORIGIN,
+        [AUTH_HTTP_HEADER.COOKIE]: `${AUTH_COOKIE.SECURE_REFRESH_TOKEN_NAME}=current-token-id.current-token-secret`,
+        "user-agent": "Integration Browser",
+      },
     });
+
+    expect(response.status).toBe(204);
+    await expect(response.text()).resolves.toBe("");
+    expect(response.headers.get("set-cookie")).toContain(
+      `${AUTH_COOKIE.SECURE_REFRESH_TOKEN_NAME}=;`,
+    );
+    expect(logoutService.execute).toHaveBeenCalledWith({
+      rawRefreshToken: "current-token-id.current-token-secret",
+      client: {
+        requestId: expect.any(String),
+        ipAddress: "127.0.0.1",
+        userAgent: "Integration Browser",
+      },
+    });
+  });
+
+  it("keeps logout idempotent when the refresh cookie is absent", async () => {
+    const response = await fetch(`${baseUrl}/api/v1/auth/logout`, {
+      method: "POST",
+    });
+
+    expect(response.status).toBe(204);
+    expect(response.headers.get("set-cookie")).toContain(
+      `${AUTH_COOKIE.SECURE_REFRESH_TOKEN_NAME}=;`,
+    );
+    expect(logoutService.execute).not.toHaveBeenCalled();
+  });
+
+  it("rejects an untrusted logout Origin when a refresh cookie is present", async () => {
+    const response = await fetch(`${baseUrl}/api/v1/auth/logout`, {
+      method: "POST",
+      headers: {
+        [AUTH_HTTP_HEADER.ORIGIN]: "https://attacker.example.com",
+        [AUTH_HTTP_HEADER.COOKIE]: `${AUTH_COOKIE.SECURE_REFRESH_TOKEN_NAME}=current-token-id.current-token-secret`,
+      },
+    });
+    const body = (await response.json()) as ErrorResponseEnvelope;
+
+    expect(response.status).toBe(403);
+    expect(body.error.code).toBe(APP_ERROR_CODE.FORBIDDEN);
+    expect(logoutService.execute).not.toHaveBeenCalled();
+  });
+
+  it("returns the current user from the authenticated identity", async () => {
+    authenticateAccessTokenService.execute.mockResolvedValue(
+      AUTHENTICATED_IDENTITY,
+    );
 
     const response = await fetch(`${baseUrl}/api/v1/auth/me`, {
       headers: {
@@ -302,7 +393,7 @@ describe("AuthController integration", () => {
     expect(response.headers.get(REQUEST_ID_HEADER)).toEqual(expect.any(String));
     await expect(response.json()).resolves.toEqual({
       data: {
-        user_id: "11111111-1111-4111-8111-111111111111",
+        user_id: USER_ID,
         display_name: "System Administrator",
         status: USER_STATUS.ACTIVE,
         permissions: [PERMISSION_CODE.ASSET_READ, PERMISSION_CODE.USER_READ],
@@ -328,6 +419,133 @@ describe("AuthController integration", () => {
       request_id: expect.any(String),
     });
     expect(authenticateAccessTokenService.execute).not.toHaveBeenCalled();
+  });
+
+  it("lists active sessions using the authenticated identity", async () => {
+    authenticateAccessTokenService.execute.mockResolvedValue(
+      AUTHENTICATED_IDENTITY,
+    );
+    listAuthSessionsService.execute.mockResolvedValue([
+      {
+        sessionId: CURRENT_SESSION_ID,
+        userId: USER_ID,
+        deviceLabel: "Chrome on macOS",
+        createdAt: new Date("2026-09-23T08:00:00.000Z"),
+        lastUsedAt: NOW,
+        idleExpiresAt: new Date("2026-10-01T08:00:00.000Z"),
+        absoluteExpiresAt: new Date("2026-10-23T08:00:00.000Z"),
+        revokedAt: null,
+        isCurrent: true,
+      },
+    ]);
+
+    const response = await fetch(`${baseUrl}/api/v1/auth/sessions`, {
+      headers: {
+        [AUTH_HTTP_HEADER.AUTHORIZATION]: "Bearer signed-access-token",
+      },
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      data: [
+        {
+          session_id: CURRENT_SESSION_ID,
+          user_id: USER_ID,
+          device_label: "Chrome on macOS",
+          created_at: "2026-09-23T08:00:00.000Z",
+          last_used_at: NOW.toISOString(),
+          idle_expires_at: "2026-10-01T08:00:00.000Z",
+          expires_at: "2026-10-23T08:00:00.000Z",
+          is_current: true,
+        },
+      ],
+    });
+    expect(listAuthSessionsService.execute).toHaveBeenCalledWith({
+      identity: AUTHENTICATED_IDENTITY,
+      targetUserId: undefined,
+    });
+  });
+
+  it("rejects session listing without a Bearer access token", async () => {
+    const response = await fetch(`${baseUrl}/api/v1/auth/sessions`);
+    const body = (await response.json()) as ErrorResponseEnvelope;
+
+    expect(response.status).toBe(401);
+    expect(body.error.code).toBe(APP_ERROR_CODE.AUTH_ACCESS_TOKEN_INVALID);
+    expect(listAuthSessionsService.execute).not.toHaveBeenCalled();
+  });
+
+  it("revokes the current session and clears its refresh cookie", async () => {
+    authenticateAccessTokenService.execute.mockResolvedValue(
+      AUTHENTICATED_IDENTITY,
+    );
+    revokeAuthSessionService.execute.mockResolvedValue({
+      revokedCurrentSession: true,
+    });
+
+    const response = await fetch(
+      `${baseUrl}/api/v1/auth/sessions/${CURRENT_SESSION_ID}`,
+      {
+        method: "DELETE",
+        headers: {
+          [AUTH_HTTP_HEADER.AUTHORIZATION]: "Bearer signed-access-token",
+        },
+      },
+    );
+
+    expect(response.status).toBe(204);
+    expect(response.headers.get("set-cookie")).toContain(
+      `${AUTH_COOKIE.SECURE_REFRESH_TOKEN_NAME}=;`,
+    );
+    expect(revokeAuthSessionService.execute).toHaveBeenCalledWith({
+      identity: AUTHENTICATED_IDENTITY,
+      sessionId: CURRENT_SESSION_ID,
+      client: expect.objectContaining({ requestId: expect.any(String) }),
+    });
+  });
+
+  it("revokes all own sessions and clears the current refresh cookie", async () => {
+    authenticateAccessTokenService.execute.mockResolvedValue(
+      AUTHENTICATED_IDENTITY,
+    );
+    revokeAllAuthSessionsService.execute.mockResolvedValue({
+      revokedCurrentSession: true,
+    });
+
+    const response = await fetch(`${baseUrl}/api/v1/auth/sessions`, {
+      method: "DELETE",
+      headers: {
+        [AUTH_HTTP_HEADER.AUTHORIZATION]: "Bearer signed-access-token",
+      },
+    });
+
+    expect(response.status).toBe(204);
+    expect(response.headers.get("set-cookie")).toContain(
+      `${AUTH_COOKIE.SECURE_REFRESH_TOKEN_NAME}=;`,
+    );
+    expect(revokeAllAuthSessionsService.execute).toHaveBeenCalledWith({
+      identity: AUTHENTICATED_IDENTITY,
+      targetUserId: undefined,
+      client: expect.objectContaining({ requestId: expect.any(String) }),
+    });
+  });
+
+  it("rejects a malformed session identifier before revocation", async () => {
+    authenticateAccessTokenService.execute.mockResolvedValue(
+      AUTHENTICATED_IDENTITY,
+    );
+
+    const response = await fetch(`${baseUrl}/api/v1/auth/sessions/not-a-uuid`, {
+      method: "DELETE",
+      headers: {
+        [AUTH_HTTP_HEADER.AUTHORIZATION]: "Bearer signed-access-token",
+      },
+    });
+    const body = (await response.json()) as ErrorResponseEnvelope;
+
+    expect(response.status).toBe(400);
+    expect(body.error.code).toBe(APP_ERROR_CODE.BAD_REQUEST);
+    expect(revokeAuthSessionService.execute).not.toHaveBeenCalled();
   });
 
   it("publishes the authentication request and response schemas in OpenAPI", () => {
@@ -370,6 +588,11 @@ describe("AuthController integration", () => {
     expect(refreshOperation?.responses["401"]).toBeDefined();
     expect(refreshOperation?.responses["403"]).toBeDefined();
 
+    const logoutOperation = document.paths["/api/v1/auth/logout"]?.post;
+    expect(logoutOperation).toBeDefined();
+    expect(logoutOperation?.responses["204"]).toBeDefined();
+    expect(logoutOperation?.responses["403"]).toBeDefined();
+
     const meOperation = document.paths["/api/v1/auth/me"]?.get;
     expect(meOperation).toBeDefined();
     expect(meOperation?.security).toEqual([
@@ -389,5 +612,15 @@ describe("AuthController integration", () => {
       },
     });
     expect(meOperation?.responses["401"]).toBeDefined();
+
+    const sessionsPath = document.paths["/api/v1/auth/sessions"];
+    expect(sessionsPath?.get?.responses["200"]).toBeDefined();
+    expect(sessionsPath?.delete?.responses["204"]).toBeDefined();
+
+    const revokeSessionOperation =
+      document.paths["/api/v1/auth/sessions/{sessionId}"]?.delete;
+    expect(revokeSessionOperation?.responses["204"]).toBeDefined();
+    expect(revokeSessionOperation?.responses["403"]).toBeDefined();
+    expect(revokeSessionOperation?.responses["404"]).toBeDefined();
   });
 });

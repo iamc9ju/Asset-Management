@@ -21,18 +21,9 @@ import { AuthSessionOrmEntity } from "./auth-session.orm-entity";
 @Index("ix_auth_refresh_tokens_active_expiry", ["expiresAt"], {
   where: "used_at IS NULL AND revoked_at IS NULL",
 })
-@Check(
-  "ck_auth_refresh_tokens_hash",
-  "token_hash ~ '^[0-9a-f]{64}$'",
-)
-@Check(
-  "ck_auth_refresh_tokens_expiry",
-  "expires_at > issued_at",
-)
-@Check(
-  "ck_auth_refresh_tokens_used",
-  "used_at IS NULL OR used_at >= issued_at",
-)
+@Check("ck_auth_refresh_tokens_hash", "token_hash ~ '^[0-9a-f]{64}$'")
+@Check("ck_auth_refresh_tokens_expiry", "expires_at > issued_at")
+@Check("ck_auth_refresh_tokens_used", "used_at IS NULL OR used_at >= issued_at")
 @Check(
   "ck_auth_refresh_tokens_revoked",
   "revoked_at IS NULL OR revoked_at >= issued_at",

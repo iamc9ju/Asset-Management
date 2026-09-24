@@ -65,13 +65,13 @@ describe("OpaqueRefreshTokenService", () => {
     const expected = service.issue();
     const different = service.issue();
 
-    expect(
-      service.hashesMatch(expected.tokenHash, expected.tokenHash),
-    ).toBe(true);
+    expect(service.hashesMatch(expected.tokenHash, expected.tokenHash)).toBe(
+      true,
+    );
 
-    expect(
-      service.hashesMatch(expected.tokenHash, different.tokenHash),
-    ).toBe(false);
+    expect(service.hashesMatch(expected.tokenHash, different.tokenHash)).toBe(
+      false,
+    );
   });
 
   it("rejects malformed hashes before constant-time comparison", () => {
