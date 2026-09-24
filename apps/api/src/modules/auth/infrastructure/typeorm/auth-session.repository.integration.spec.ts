@@ -19,6 +19,7 @@ import { TypeOrmAuthEventRepository } from "./auth-event.repository";
 import { TypeOrmAuthSessionQueryRepository } from "./auth-session-query.repository";
 import { TypeOrmAuthSessionRepository } from "./auth-session.repository";
 import { TypeOrmRefreshSessionRepository } from "./refresh-session.repository";
+import { TypeOrmSessionManagementRepository } from "./session-management.repository";
 import { AuthRefreshTokenOrmEntity } from "./entities/auth-refresh-token.orm-entity";
 import { AuthSessionOrmEntity } from "./entities/auth-session.orm-entity";
 
@@ -38,6 +39,7 @@ describeWithDatabase("TypeOrmAuthSessionRepository integration", () => {
   let dataSource: DataSource;
   let repository: TypeOrmAuthSessionRepository;
   let refreshRepository: TypeOrmRefreshSessionRepository;
+  let sessionManagementRepository: TypeOrmSessionManagementRepository;
   let sessionQueryRepository: TypeOrmAuthSessionQueryRepository;
   let eventRepository: TypeOrmAuthEventRepository;
   let schemaCreated = false;
@@ -105,6 +107,10 @@ describeWithDatabase("TypeOrmAuthSessionRepository integration", () => {
 
     repository = new TypeOrmAuthSessionRepository(dataSource);
     refreshRepository = new TypeOrmRefreshSessionRepository(
+      dataSource,
+      new OpaqueRefreshTokenService(),
+    );
+    sessionManagementRepository = new TypeOrmSessionManagementRepository(
       dataSource,
       new OpaqueRefreshTokenService(),
     );
@@ -565,5 +571,220 @@ describeWithDatabase("TypeOrmAuthSessionRepository integration", () => {
       [loginInput.sessionId],
     )) as Array<{ count: number }>;
     expect(tokenCountRows[0]).toEqual({ count: 1 });
+  });
+
+  it("logs out a valid refresh credential idempotently and revokes its token family", async () => {
+    const userId = await insertUser();
+    const loginInput = createInput(userId);
+    await repository.createLoginSession(loginInput);
+    const logoutOccurredAt = new Date("2026-09-18T09:00:00.000Z");
+    const logoutInput = {
+      tokenId: loginInput.refreshTokenId,
+      tokenHash: loginInput.refreshTokenHash,
+      occurredAt: logoutOccurredAt,
+      client: {
+        requestId: randomUUID(),
+        ipAddress: "127.0.0.3",
+        userAgent: "Logout repository integration test",
+      },
+    };
+
+    await expect(
+      sessionManagementRepository.logoutByRefreshCredential(logoutInput),
+    ).resolves.toBeUndefined();
+    await expect(
+      sessionManagementRepository.logoutByRefreshCredential(logoutInput),
+    ).resolves.toBeUndefined();
+
+    const [session] = (await dataSource.query(
+      "SELECT revoked_at, revoke_reason FROM auth_sessions WHERE id = $1",
+      [loginInput.sessionId],
+    )) as Array<Record<string, unknown>>;
+    const [token] = (await dataSource.query(
+      "SELECT revoked_at FROM auth_refresh_tokens WHERE id = $1",
+      [loginInput.refreshTokenId],
+    )) as Array<Record<string, unknown>>;
+    const activities = (await dataSource.query(
+      "SELECT action, outcome FROM activity_logs WHERE request_id = $1",
+      [logoutInput.client.requestId],
+    )) as Array<Record<string, unknown>>;
+
+    expect(session).toEqual({
+      revoked_at: logoutOccurredAt,
+      revoke_reason: AUTH_SESSION_REVOKE_REASON.USER_LOGOUT,
+    });
+    expect(token).toEqual({ revoked_at: logoutOccurredAt });
+    expect(activities).toEqual([
+      { action: "LOGOUT_SUCCEEDED", outcome: "SUCCESS" },
+    ]);
+  });
+
+  it("does not revoke a session when logout has the right selector but wrong secret", async () => {
+    const userId = await insertUser();
+    const loginInput = createInput(userId);
+    await repository.createLoginSession(loginInput);
+
+    await sessionManagementRepository.logoutByRefreshCredential({
+      tokenId: loginInput.refreshTokenId,
+      tokenHash: "f".repeat(64),
+      occurredAt: new Date("2026-09-18T09:00:00.000Z"),
+      client: {
+        requestId: randomUUID(),
+        ipAddress: null,
+        userAgent: null,
+      },
+    });
+
+    const [session] = (await dataSource.query(
+      "SELECT revoked_at, revoke_reason FROM auth_sessions WHERE id = $1",
+      [loginInput.sessionId],
+    )) as Array<Record<string, unknown>>;
+
+    expect(session).toEqual({ revoked_at: null, revoke_reason: null });
+  });
+
+  it("lists only active, unexpired sessions for the requested user", async () => {
+    const userId = await insertUser();
+    const otherUserId = await insertUser();
+    const currentInput = createInput(userId);
+    const expiredInput = createInput(userId, {
+      refreshTokenHash: "b".repeat(64),
+    });
+    const otherInput = createInput(otherUserId, {
+      refreshTokenHash: "c".repeat(64),
+    });
+    await repository.createLoginSession(currentInput);
+    await repository.createLoginSession(expiredInput);
+    await repository.createLoginSession(otherInput);
+    await dataSource.query(
+      "UPDATE auth_sessions SET idle_expires_at = $1 WHERE id = $2",
+      [new Date("2026-09-18T08:30:00.000Z"), expiredInput.sessionId],
+    );
+
+    await expect(
+      sessionManagementRepository.listActiveByUserId(
+        userId,
+        new Date("2026-09-18T09:00:00.000Z"),
+      ),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        sessionId: currentInput.sessionId,
+        userId,
+        deviceLabel: "Integration Browser",
+        revokedAt: null,
+      }),
+    ]);
+  });
+
+  it("revokes one session and records the actor and reason atomically", async () => {
+    const actorUserId = await insertUser();
+    const targetUserId = await insertUser();
+    const targetInput = createInput(targetUserId);
+    await repository.createLoginSession(targetInput);
+    const requestId = randomUUID();
+    const occurredAt = new Date("2026-09-18T10:00:00.000Z");
+
+    await expect(
+      sessionManagementRepository.revokeById({
+        sessionId: targetInput.sessionId,
+        actorUserId,
+        reason: AUTH_SESSION_REVOKE_REASON.ADMIN_REVOKED_SESSION,
+        occurredAt,
+        client: {
+          requestId,
+          ipAddress: "127.0.0.4",
+          userAgent: "Session revocation integration test",
+        },
+      }),
+    ).resolves.toBe(true);
+    await expect(
+      sessionManagementRepository.revokeById({
+        sessionId: targetInput.sessionId,
+        actorUserId,
+        reason: AUTH_SESSION_REVOKE_REASON.ADMIN_REVOKED_SESSION,
+        occurredAt: new Date(occurredAt.getTime() + 1_000),
+        client: {
+          requestId,
+          ipAddress: "127.0.0.4",
+          userAgent: "Session revocation integration test",
+        },
+      }),
+    ).resolves.toBe(true);
+
+    const [session] = (await dataSource.query(
+      "SELECT revoked_at, revoke_reason FROM auth_sessions WHERE id = $1",
+      [targetInput.sessionId],
+    )) as Array<Record<string, unknown>>;
+    const [token] = (await dataSource.query(
+      "SELECT revoked_at FROM auth_refresh_tokens WHERE id = $1",
+      [targetInput.refreshTokenId],
+    )) as Array<Record<string, unknown>>;
+    const activities = (await dataSource.query(
+      "SELECT actor_user_id, action, entity_id, metadata FROM activity_logs WHERE request_id = $1",
+      [requestId],
+    )) as Array<Record<string, unknown>>;
+
+    expect(session).toEqual({
+      revoked_at: occurredAt,
+      revoke_reason: AUTH_SESSION_REVOKE_REASON.ADMIN_REVOKED_SESSION,
+    });
+    expect(token).toEqual({ revoked_at: occurredAt });
+    expect(activities).toEqual([
+      {
+        actor_user_id: actorUserId,
+        action: "SESSION_REVOKED",
+        entity_id: targetInput.sessionId,
+        metadata: {
+          reason: AUTH_SESSION_REVOKE_REASON.ADMIN_REVOKED_SESSION,
+        },
+      },
+    ]);
+  });
+
+  it("revokes all sessions for one user without affecting another user", async () => {
+    const userId = await insertUser();
+    const otherUserId = await insertUser();
+    const firstInput = createInput(userId);
+    const secondInput = createInput(userId, {
+      refreshTokenHash: "b".repeat(64),
+    });
+    const otherInput = createInput(otherUserId, {
+      refreshTokenHash: "c".repeat(64),
+    });
+    await repository.createLoginSession(firstInput);
+    await repository.createLoginSession(secondInput);
+    await repository.createLoginSession(otherInput);
+    const requestId = randomUUID();
+
+    await expect(
+      sessionManagementRepository.revokeAllByUserId({
+        userId,
+        actorUserId: userId,
+        reason: AUTH_SESSION_REVOKE_REASON.USER_REVOKED_ALL_SESSIONS,
+        occurredAt: new Date("2026-09-18T11:00:00.000Z"),
+        client: {
+          requestId,
+          ipAddress: null,
+          userAgent: "Revoke all integration test",
+        },
+      }),
+    ).resolves.toBe(2);
+
+    const sessions = (await dataSource.query(
+      "SELECT user_id, revoked_at FROM auth_sessions ORDER BY user_id, id",
+    )) as Array<{ user_id: string; revoked_at: Date | null }>;
+    const activityCountRows = (await dataSource.query(
+      "SELECT count(*)::int AS count FROM activity_logs WHERE request_id = $1",
+      [requestId],
+    )) as Array<{ count: number }>;
+
+    expect(sessions.filter((session) => session.user_id === userId)).toEqual([
+      expect.objectContaining({ revoked_at: expect.any(Date) }),
+      expect.objectContaining({ revoked_at: expect.any(Date) }),
+    ]);
+    expect(sessions.find((session) => session.user_id === otherUserId)).toEqual(
+      expect.objectContaining({ revoked_at: null }),
+    );
+    expect(activityCountRows[0]).toEqual({ count: 2 });
   });
 });

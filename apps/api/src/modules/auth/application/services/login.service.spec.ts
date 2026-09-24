@@ -10,10 +10,7 @@ import type { IdentifierGenerator } from "../ports/identifier-generator.port";
 import type { PasswordHasher } from "../ports/password-hasher.port";
 import type { RefreshTokenService } from "../ports/refresh-token.port";
 import type { IamAuthQuery } from "../../../iam/application/ports/iam-auth-query.port";
-import {
-  USER_STATUS,
-  type UserStatus,
-} from "../../../iam/domain/user-status";
+import { USER_STATUS, type UserStatus } from "../../../iam/domain/user-status";
 import { APP_ERROR_CODE } from "../../../../shared/errors/app-error-code";
 import { AppError } from "../../../../shared/errors/app-error";
 import { AUTH_TOKEN_TYPE } from "../../domain/auth.constants";

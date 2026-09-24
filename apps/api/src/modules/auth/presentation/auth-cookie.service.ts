@@ -40,6 +40,13 @@ export class AuthCookieService {
     );
   }
 
+  hasRefreshTokenCookie(request: Request): boolean {
+    return hasCookie(
+      request.get(AUTH_HTTP_HEADER.COOKIE),
+      this.refreshCookieName,
+    );
+  }
+
   clearRefreshToken(response: Response): void {
     response.clearCookie(this.refreshCookieName, {
       httpOnly: true,
@@ -86,4 +93,22 @@ export function readCookie(
   }
 
   return values.length === 1 && values[0] ? values[0] : null;
+}
+
+export function hasCookie(
+  cookieHeader: string | undefined,
+  cookieName: string,
+): boolean {
+  if (!cookieHeader) {
+    return false;
+  }
+
+  return cookieHeader.split(";").some((segment) => {
+    const separatorIndex = segment.indexOf("=");
+
+    return (
+      separatorIndex >= 0 &&
+      segment.slice(0, separatorIndex).trim() === cookieName
+    );
+  });
 }

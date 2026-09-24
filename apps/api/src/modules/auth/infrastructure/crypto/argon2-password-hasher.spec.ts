@@ -7,9 +7,7 @@ describe("Argon2PasswordHasher", () => {
   it("hashes and verifies a password with Argon2id", async () => {
     const passwordHash = await hasher.hash(password);
 
-    expect(passwordHash).toMatch(
-      /^\$argon2id\$v=19\$m=19456,p=1,t=2\$/,
-    );
+    expect(passwordHash).toMatch(/^\$argon2id\$v=19\$m=19456,p=1,t=2\$/);
     await expect(hasher.verify(passwordHash, password)).resolves.toBe(true);
   });
 
@@ -29,9 +27,9 @@ describe("Argon2PasswordHasher", () => {
   });
 
   it("returns false for a malformed password hash", async () => {
-    await expect(
-      hasher.verify("not-an-argon2-hash", password),
-    ).resolves.toBe(false);
+    await expect(hasher.verify("not-an-argon2-hash", password)).resolves.toBe(
+      false,
+    );
   });
 
   it("consumes Argon2 work for an unknown account without returning a hash", async () => {

@@ -39,10 +39,7 @@ export class OpaqueRefreshTokenService implements RefreshTokenService {
   parseAndHash(rawToken: string): PresentedRefreshToken | null {
     const separatorIndex = rawToken.indexOf(".");
 
-    if (
-      separatorIndex <= 0 ||
-      separatorIndex !== rawToken.lastIndexOf(".")
-    ) {
+    if (separatorIndex <= 0 || separatorIndex !== rawToken.lastIndexOf(".")) {
       return null;
     }
 

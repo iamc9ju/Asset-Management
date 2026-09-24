@@ -5,6 +5,7 @@ import {
   type LoginFailureReason,
 } from "../../application/ports/auth-event.port";
 import type { AuthClientContext } from "../../application/ports/auth-client-context.port";
+import type { AuthSessionRevokeReason } from "../../domain/auth.constants";
 
 const ACTIVITY_ACTOR_TYPE = {
   USER: "USER",
@@ -38,6 +39,21 @@ interface InsertLoginFailureActivityInput {
 interface InsertRefreshActivityInput {
   readonly userId: string;
   readonly sessionId: string;
+  readonly occurredAt: Date;
+  readonly client: AuthClientContext;
+}
+
+interface InsertLogoutActivityInput {
+  readonly userId: string;
+  readonly sessionId: string;
+  readonly occurredAt: Date;
+  readonly client: AuthClientContext;
+}
+
+interface InsertSessionRevocationActivityInput {
+  readonly actorUserId: string;
+  readonly sessionId: string;
+  readonly reason: AuthSessionRevokeReason;
   readonly occurredAt: Date;
   readonly client: AuthClientContext;
 }
@@ -105,6 +121,40 @@ export async function insertRefreshTokenReuseActivity(
     entityId: input.sessionId,
     metadata: {},
     outcome: ACTIVITY_OUTCOME.DENIED,
+    occurredAt: input.occurredAt,
+    client: input.client,
+  });
+}
+
+export async function insertLogoutSuccessActivity(
+  manager: EntityManager,
+  input: InsertLogoutActivityInput,
+): Promise<void> {
+  await insertActivity(manager, {
+    actorUserId: input.userId,
+    actorType: ACTIVITY_ACTOR_TYPE.USER,
+    action: AUTH_EVENT_ACTION.LOGOUT_SUCCEEDED,
+    entityType: ACTIVITY_ENTITY_TYPE.AUTH_SESSION,
+    entityId: input.sessionId,
+    metadata: {},
+    outcome: ACTIVITY_OUTCOME.SUCCESS,
+    occurredAt: input.occurredAt,
+    client: input.client,
+  });
+}
+
+export async function insertSessionRevokedActivity(
+  manager: EntityManager,
+  input: InsertSessionRevocationActivityInput,
+): Promise<void> {
+  await insertActivity(manager, {
+    actorUserId: input.actorUserId,
+    actorType: ACTIVITY_ACTOR_TYPE.USER,
+    action: AUTH_EVENT_ACTION.SESSION_REVOKED,
+    entityType: ACTIVITY_ENTITY_TYPE.AUTH_SESSION,
+    entityId: input.sessionId,
+    metadata: { reason: input.reason },
+    outcome: ACTIVITY_OUTCOME.SUCCESS,
     occurredAt: input.occurredAt,
     client: input.client,
   });

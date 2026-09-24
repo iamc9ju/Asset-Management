@@ -2,7 +2,11 @@ import type { Request, Response } from "express";
 import type { AuthSessionConfig } from "../application/config/auth-session.config";
 import type { Clock } from "../application/ports/clock.port";
 import { AUTH_COOKIE } from "../domain/auth.constants";
-import { AuthCookieService, readCookie } from "./auth-cookie.service";
+import {
+  AuthCookieService,
+  hasCookie,
+  readCookie,
+} from "./auth-cookie.service";
 
 const NOW = new Date("2026-09-17T10:00:00.000Z");
 const EXPIRES_AT = new Date("2026-09-17T11:00:00.000Z");
@@ -117,6 +121,21 @@ describe("readCookie", () => {
     "rejects an absent, empty, malformed, or ambiguous cookie %p",
     (header) => {
       expect(readCookie(header, "am_refresh")).toBeNull();
+    },
+  );
+});
+
+describe("hasCookie", () => {
+  it("detects a named cookie without trusting or decoding its value", () => {
+    expect(hasCookie("other=value; am_refresh=%E0%A4%A", "am_refresh")).toBe(
+      true,
+    );
+  });
+
+  it.each([undefined, "", "other=value", "am_refresh_without_equals"])(
+    "returns false when the named cookie is absent from %p",
+    (header) => {
+      expect(hasCookie(header, "am_refresh")).toBe(false);
     },
   );
 });

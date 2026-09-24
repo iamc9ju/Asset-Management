@@ -19,15 +19,9 @@ import { UserOrmEntity } from "../../../../iam/infrastructure/typeorm/entities/u
   "ck_auth_sessions_device_label_nonblank",
   "device_label IS NULL OR btrim(device_label) <> ''",
 )
-@Check(
-  "ck_auth_sessions_idle_expiry",
-  "idle_expires_at > created_at",
-)
+@Check("ck_auth_sessions_idle_expiry", "idle_expires_at > created_at")
 @Check("ck_auth_sessions_absolute_expiry", "expires_at > created_at")
-@Check(
-  "ck_auth_sessions_idle_before_absolute",
-  "idle_expires_at <= expires_at",
-)
+@Check("ck_auth_sessions_idle_before_absolute", "idle_expires_at <= expires_at")
 @Check(
   "ck_auth_sessions_last_used",
   "last_used_at IS NULL OR last_used_at >= created_at",
