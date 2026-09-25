@@ -48,6 +48,14 @@ class ErrorTestController {
   unexpected(): never {
     throw new Error("SQL failure containing secret=must-not-be-returned");
   }
+
+  @Get("rate-limited")
+  rateLimited(): never {
+    throw new AppError(APP_ERROR_CODE.AUTH_RATE_LIMITED, {
+      retryAfterSeconds: 73,
+      details: { retry_after_seconds: 73 },
+    });
+  }
 }
 
 describe("GlobalExceptionFilter integration", () => {
@@ -171,6 +179,20 @@ describe("GlobalExceptionFilter integration", () => {
     expect(JSON.stringify(body)).not.toContain("SQL failure");
     expect(JSON.stringify(body)).not.toContain("must-not-be-returned");
     expect(JSON.stringify(body)).not.toContain("stack");
+    expectRequestId(response, body);
+  });
+
+  it("returns Retry-After for a typed rate-limit error", async () => {
+    const { response, body } = await readErrorResponse(
+      "/api/v1/test-errors/rate-limited",
+    );
+
+    expect(response.status).toBe(429);
+    expect(response.headers.get("retry-after")).toBe("73");
+    expect(body.error).toMatchObject({
+      code: APP_ERROR_CODE.AUTH_RATE_LIMITED,
+      details: { retry_after_seconds: 73 },
+    });
     expectRequestId(response, body);
   });
 });

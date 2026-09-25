@@ -2,12 +2,14 @@ import { APP_ERROR_MESSAGE, type AppErrorCode } from "./app-error-code";
 
 export interface AppErrorOptions {
   readonly details?: Readonly<Record<string, unknown>>;
+  readonly retryAfterSeconds?: number;
   readonly cause?: unknown;
 }
 
 export class AppError extends Error {
   readonly code: AppErrorCode;
   readonly details?: Readonly<Record<string, unknown>>;
+  readonly retryAfterSeconds?: number;
 
   constructor(code: AppErrorCode, options: AppErrorOptions = {}) {
     super(APP_ERROR_MESSAGE[code], { cause: options.cause });
@@ -15,5 +17,6 @@ export class AppError extends Error {
     this.name = AppError.name;
     this.code = code;
     this.details = options.details;
+    this.retryAfterSeconds = options.retryAfterSeconds;
   }
 }

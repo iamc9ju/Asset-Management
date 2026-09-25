@@ -10,6 +10,7 @@ import {
 import type { RefreshTokenService } from "../ports/refresh-token.port";
 import { AUTH_TOKEN_TYPE } from "../../domain/auth.constants";
 import { RefreshSessionService } from "./refresh-session.service";
+import { AuthRateLimitService } from "./auth-rate-limit.service";
 
 const NOW = new Date("2026-09-21T08:00:00.000Z");
 const REFRESH_EXPIRES_AT = new Date("2026-10-21T08:00:00.000Z");
@@ -48,6 +49,13 @@ function createService() {
     absoluteTtlSeconds: 2_592_000,
     refreshCookieSecure: true,
   };
+  const authRateLimitService = {
+    assertLoginAllowed: jest.fn(),
+    recordLoginFailure: jest.fn(),
+    recordLoginSuccess: jest.fn(),
+    assertRefreshIpAllowed: jest.fn(),
+    assertRefreshTokenAllowed: jest.fn(),
+  } as unknown as jest.Mocked<AuthRateLimitService>;
   const service = new RefreshSessionService(
     refreshTokenService,
     refreshSessionRepository,
@@ -55,6 +63,7 @@ function createService() {
     clock,
     accessTokenConfig,
     authSessionConfig,
+    authRateLimitService,
   );
 
   refreshTokenService.parseAndHash.mockReturnValue({
@@ -72,6 +81,7 @@ function createService() {
     refreshTokenService,
     refreshSessionRepository,
     accessTokenService,
+    authRateLimitService,
   };
 }
 

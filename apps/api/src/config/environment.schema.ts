@@ -66,8 +66,15 @@ const jwtSecretSchema = z
   .string()
   .min(43, "must contain at least 43 characters");
 
+const rateLimitSecretSchema = z
+  .string()
+  .min(43, "must contain at least 43 characters");
+
 const DEVELOPMENT_JWT_SECRET =
   "change-me-with-a-random-jwt-secret-of-at-least-256-bits";
+const DEVELOPMENT_RATE_LIMIT_SECRET =
+  "change-me-with-a-random-rate-limit-secret-of-at-least-256-bits";
+const DEVELOPMENT_RATE_LIMIT_NAMESPACE = "asset-management-development";
 
 export const environmentSchema = z
   .object({
@@ -76,6 +83,7 @@ export const environmentSchema = z
       .default("development"),
 
     API_PORT: portSchema.default(3000),
+    HTTP_TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(0),
     WEB_ORIGIN: webOriginSchema,
     OPENAPI_ENABLED: booleanSchema.default(false),
     OPENAPI_UI_ENABLED: booleanSchema.default(false),
@@ -96,9 +104,28 @@ export const environmentSchema = z
       .max(31_536_000)
       .default(2_592_000),
     AUTH_LOGIN_RATE_LIMIT: positiveIntegerSchema.max(1_000).default(10),
+    AUTH_LOGIN_IP_RATE_LIMIT: positiveIntegerSchema.max(100_000).default(100),
     AUTH_LOGIN_RATE_WINDOW_SECONDS: positiveIntegerSchema.default(900),
-    AUTH_REFRESH_RATE_LIMIT: positiveIntegerSchema.max(10_000).default(60),
+    AUTH_REFRESH_RATE_LIMIT: positiveIntegerSchema.max(10_000).default(30),
+    AUTH_REFRESH_IP_RATE_LIMIT: positiveIntegerSchema
+      .max(100_000)
+      .default(300),
     AUTH_REFRESH_RATE_WINDOW_SECONDS: positiveIntegerSchema.default(60),
+    AUTH_RATE_LIMIT_KEY_SECRET: rateLimitSecretSchema.default(
+      DEVELOPMENT_RATE_LIMIT_SECRET,
+    ),
+    AUTH_RATE_LIMIT_NAMESPACE: z
+      .string()
+      .trim()
+      .min(1)
+      .max(100)
+      .regex(/^[a-z0-9][a-z0-9:-]*[a-z0-9]$/)
+      .default(DEVELOPMENT_RATE_LIMIT_NAMESPACE),
+    AUTH_SESSION_RETENTION_SECONDS: positiveIntegerSchema
+      .max(31_536_000)
+      .default(2_592_000),
+    AUTH_CLEANUP_BATCH_SIZE: positiveIntegerSchema.max(5_000).default(500),
+    AUTH_CLEANUP_MAX_BATCHES: positiveIntegerSchema.max(100).default(20),
     AUTH_REFRESH_COOKIE_SECURE: booleanSchema.default(false),
 
     LOG_LEVEL: logLevelSchema.optional(),
@@ -274,6 +301,11 @@ export const environmentSchema = z
         environment.AUTH_JWT_CURRENT_SECRET,
         DEVELOPMENT_JWT_SECRET,
       ],
+      [
+        "AUTH_RATE_LIMIT_KEY_SECRET",
+        environment.AUTH_RATE_LIMIT_KEY_SECRET,
+        DEVELOPMENT_RATE_LIMIT_SECRET,
+      ],
     ] as const;
 
     for (const [key, value, placeholder] of secrets) {
@@ -284,6 +316,17 @@ export const environmentSchema = z
           message: "must not use the development placeholder in production",
         });
       }
+    }
+
+    if (
+      environment.AUTH_RATE_LIMIT_NAMESPACE ===
+      DEVELOPMENT_RATE_LIMIT_NAMESPACE
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["AUTH_RATE_LIMIT_NAMESPACE"],
+        message: "must identify the production environment explicitly",
+      });
     }
   });
 

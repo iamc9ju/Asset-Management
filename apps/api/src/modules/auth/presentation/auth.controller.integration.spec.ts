@@ -238,6 +238,32 @@ describe("AuthController integration", () => {
     expect(loginService.execute).not.toHaveBeenCalled();
   });
 
+  it("returns the standard rate-limit envelope and Retry-After for login", async () => {
+    loginService.execute.mockRejectedValue(
+      new AppError(APP_ERROR_CODE.AUTH_RATE_LIMITED, {
+        retryAfterSeconds: 73,
+        details: { retry_after_seconds: 73 },
+      }),
+    );
+
+    const response = await fetch(`${baseUrl}/api/v1/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        email: "user@example.com",
+        password: "candidate-password",
+      }),
+    });
+    const body = (await response.json()) as ErrorResponseEnvelope;
+
+    expect(response.status).toBe(429);
+    expect(response.headers.get("retry-after")).toBe("73");
+    expect(body.error).toMatchObject({
+      code: APP_ERROR_CODE.AUTH_RATE_LIMITED,
+      details: { retry_after_seconds: 73 },
+    });
+  });
+
   it("rotates the refresh cookie and returns a new access token", async () => {
     refreshSessionService.execute.mockResolvedValue({
       accessToken: "rotated-access-token",
@@ -309,6 +335,29 @@ describe("AuthController integration", () => {
     expect(response.headers.get("set-cookie")).toContain(
       `${AUTH_COOKIE.SECURE_REFRESH_TOKEN_NAME}=;`,
     );
+  });
+
+  it("preserves the refresh cookie when a refresh request is rate limited", async () => {
+    refreshSessionService.execute.mockRejectedValue(
+      new AppError(APP_ERROR_CODE.AUTH_RATE_LIMITED, {
+        retryAfterSeconds: 12,
+        details: { retry_after_seconds: 12 },
+      }),
+    );
+
+    const response = await fetch(`${baseUrl}/api/v1/auth/refresh`, {
+      method: "POST",
+      headers: {
+        [AUTH_HTTP_HEADER.ORIGIN]: TRUSTED_ORIGIN,
+        [AUTH_HTTP_HEADER.COOKIE]: `${AUTH_COOKIE.SECURE_REFRESH_TOKEN_NAME}=current-token-id.current-token-secret`,
+      },
+    });
+    const body = (await response.json()) as ErrorResponseEnvelope;
+
+    expect(response.status).toBe(429);
+    expect(response.headers.get("retry-after")).toBe("12");
+    expect(response.headers.get("set-cookie")).toBeNull();
+    expect(body.error.code).toBe(APP_ERROR_CODE.AUTH_RATE_LIMITED);
   });
 
   it("clears the cookie when the refresh credential is missing", async () => {
@@ -579,6 +628,8 @@ describe("AuthController integration", () => {
       },
     });
     expect(operation?.responses["401"]).toBeDefined();
+    expect(operation?.responses["429"]).toBeDefined();
+    expect(operation?.responses["503"]).toBeDefined();
 
     const refreshOperation = document.paths["/api/v1/auth/refresh"]?.post;
     expect(refreshOperation).toBeDefined();
@@ -587,6 +638,8 @@ describe("AuthController integration", () => {
     ]);
     expect(refreshOperation?.responses["401"]).toBeDefined();
     expect(refreshOperation?.responses["403"]).toBeDefined();
+    expect(refreshOperation?.responses["429"]).toBeDefined();
+    expect(refreshOperation?.responses["503"]).toBeDefined();
 
     const logoutOperation = document.paths["/api/v1/auth/logout"]?.post;
     expect(logoutOperation).toBeDefined();

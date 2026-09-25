@@ -23,6 +23,11 @@ import { AUTH_HTTP_HEADER, AUTH_TOKEN_TYPE } from "../domain/auth.constants";
 import { RequirePermissions } from "./decorators/require-permissions.decorator";
 import { AccessTokenGuard } from "./guards/access-token.guard";
 import { PermissionGuard } from "./guards/permission.guard";
+import {
+  AUTH_EVENT_REPOSITORY,
+  type AuthEventRepository,
+} from "../application/ports/auth-event.port";
+import { CLOCK, type Clock } from "../application/ports/clock.port";
 
 const ACCESS_TOKEN = "header.payload.signature";
 const PROTECTED_ENDPOINT_PATH = "/api/v1/permission-test";
@@ -55,9 +60,19 @@ describe("Permission enforcement integration", () => {
   let app: INestApplication;
   let baseUrl: string;
   let authenticateAccessTokenService: { execute: jest.Mock };
+  let authEventRepository: jest.Mocked<AuthEventRepository>;
 
   beforeAll(async () => {
     authenticateAccessTokenService = { execute: jest.fn() };
+    authEventRepository = {
+      recordLoginFailure: jest.fn(),
+      recordRateLimitExceeded: jest.fn(),
+      recordAuthorizationDenied: jest.fn(),
+      recordRetentionCleanupCompleted: jest.fn(),
+    };
+    const clock: Clock = {
+      now: () => new Date("2026-09-25T09:00:00.000Z"),
+    };
 
     const moduleRef = await Test.createTestingModule({
       controllers: [PermissionTestController],
@@ -68,6 +83,8 @@ describe("Permission enforcement integration", () => {
         },
         AccessTokenGuard,
         PermissionGuard,
+        { provide: AUTH_EVENT_REPOSITORY, useValue: authEventRepository },
+        { provide: CLOCK, useValue: clock },
         { provide: APP_FILTER, useClass: GlobalExceptionFilter },
       ],
     }).compile();
@@ -84,6 +101,7 @@ describe("Permission enforcement integration", () => {
 
   beforeEach(() => {
     authenticateAccessTokenService.execute.mockReset();
+    authEventRepository.recordAuthorizationDenied.mockReset();
   });
 
   afterAll(async () => {

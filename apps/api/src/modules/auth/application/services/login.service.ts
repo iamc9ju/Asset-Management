@@ -46,6 +46,7 @@ import { APP_ERROR_CODE } from "../../../../shared/errors/app-error-code";
 import { AppError } from "../../../../shared/errors/app-error";
 import { AUTH_TOKEN_TYPE } from "../../domain/auth.constants";
 import { calculateInitialSessionExpiration } from "../../domain/session-policy";
+import { AuthRateLimitService } from "./auth-rate-limit.service";
 
 export interface LoginCommand {
   readonly email: string;
@@ -85,16 +86,22 @@ export class LoginService {
     private readonly accessTokenConfig: AccessTokenConfig,
     @Inject(AUTH_SESSION_CONFIG)
     private readonly authSessionConfig: AuthSessionConfig,
+    private readonly authRateLimitService: AuthRateLimitService,
   ) {}
 
   async execute(command: LoginCommand): Promise<LoginResult> {
     const normalizedEmail = normalizeEmail(command.email);
+    await this.authRateLimitService.assertLoginAllowed(
+      normalizedEmail,
+      command.client,
+    );
     const user =
       await this.iamAuthQuery.findAuthenticationUserByEmail(normalizedEmail);
     const passwordMatches = await this.verifyCredential(user, command.password);
 
     if (!user) {
       return this.rejectLogin(
+        normalizedEmail,
         null,
         LOGIN_FAILURE_REASON.UNKNOWN_IDENTITY,
         command.client,
@@ -103,6 +110,7 @@ export class LoginService {
 
     if (!passwordMatches) {
       return this.rejectLogin(
+        normalizedEmail,
         user.id,
         LOGIN_FAILURE_REASON.INVALID_PASSWORD,
         command.client,
@@ -111,11 +119,14 @@ export class LoginService {
 
     if (user.status !== USER_STATUS.ACTIVE) {
       return this.rejectLogin(
+        normalizedEmail,
         user.id,
         LOGIN_FAILURE_REASON.ACCOUNT_NOT_ACTIVE,
         command.client,
       );
     }
+
+    await this.authRateLimitService.recordLoginSuccess(normalizedEmail);
 
     const occurredAt = this.clock.now();
     const sessionId = this.identifierGenerator.generate();
@@ -142,6 +153,7 @@ export class LoginService {
 
     if (result === CREATE_LOGIN_SESSION_RESULT.USER_NOT_ACTIVE) {
       return this.rejectLogin(
+        normalizedEmail,
         user.id,
         LOGIN_FAILURE_REASON.ACCOUNT_NOT_ACTIVE,
         command.client,
@@ -171,6 +183,7 @@ export class LoginService {
   }
 
   private async rejectLogin(
+    normalizedEmail: string,
     targetUserId: string | null,
     reason: LoginFailureReason,
     client: AuthClientContext,
@@ -182,6 +195,12 @@ export class LoginService {
       occurredAt,
       client,
     });
+
+    await this.authRateLimitService.recordLoginFailure(
+      normalizedEmail,
+      targetUserId,
+      client,
+    );
 
     throw new AppError(APP_ERROR_CODE.AUTH_INVALID_CREDENTIALS);
   }

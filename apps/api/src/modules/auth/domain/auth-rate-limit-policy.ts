@@ -1,0 +1,9 @@
+export const AUTH_RATE_LIMIT_POLICY = {
+  LOGIN_IP: "LOGIN_IP",
+  LOGIN_ACCOUNT: "LOGIN_ACCOUNT",
+  REFRESH_IP: "REFRESH_IP",
+  REFRESH_TOKEN: "REFRESH_TOKEN",
+} as const;
+
+export type AuthRateLimitPolicy =
+  (typeof AUTH_RATE_LIMIT_POLICY)[keyof typeof AUTH_RATE_LIMIT_POLICY];

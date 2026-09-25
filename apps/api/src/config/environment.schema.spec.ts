@@ -8,6 +8,9 @@ const VALID_ENVIRONMENT = {
   AUTH_JWT_CURRENT_KID: "v1",
   AUTH_JWT_CURRENT_SECRET:
     "test-signing-secret-with-at-least-256-bits-of-entropy-value",
+  AUTH_RATE_LIMIT_KEY_SECRET:
+    "test-rate-limit-secret-with-at-least-256-bits-of-entropy",
+  AUTH_RATE_LIMIT_NAMESPACE: "asset-management-test",
   AUTH_REFRESH_COOKIE_SECURE: "true",
   DATABASE_URL:
     "postgresql://database-user:secure-database-password@example.neon.tech/database?sslmode=verify-full&channel_binding=require",
@@ -55,7 +58,13 @@ describe("environmentSchema", () => {
     expect(result.AUTH_SESSION_IDLE_TTL_SECONDS).toBe(604_800);
     expect(result.AUTH_SESSION_ABSOLUTE_TTL_SECONDS).toBe(2_592_000);
     expect(result.AUTH_LOGIN_RATE_LIMIT).toBe(10);
-    expect(result.AUTH_REFRESH_RATE_LIMIT).toBe(60);
+    expect(result.AUTH_LOGIN_IP_RATE_LIMIT).toBe(100);
+    expect(result.AUTH_REFRESH_RATE_LIMIT).toBe(30);
+    expect(result.AUTH_REFRESH_IP_RATE_LIMIT).toBe(300);
+    expect(result.AUTH_SESSION_RETENTION_SECONDS).toBe(2_592_000);
+    expect(result.AUTH_CLEANUP_BATCH_SIZE).toBe(500);
+    expect(result.AUTH_CLEANUP_MAX_BATCHES).toBe(20);
+    expect(result.HTTP_TRUST_PROXY_HOPS).toBe(0);
     expect(result.AUTH_REFRESH_COOKIE_SECURE).toBe(false);
   });
 
@@ -112,6 +121,25 @@ describe("environmentSchema", () => {
         AUTH_JWT_CURRENT_SECRET: "too-short",
       }),
     ).toThrow(/Environment validation failed: AUTH_JWT_CURRENT_SECRET:/);
+  });
+
+  it("rejects a short authentication rate-limit key secret", () => {
+    expect(() =>
+      validateEnvironment({
+        ...VALID_ENVIRONMENT,
+        AUTH_RATE_LIMIT_KEY_SECRET: "too-short",
+      }),
+    ).toThrow(/Environment validation failed: AUTH_RATE_LIMIT_KEY_SECRET:/);
+  });
+
+  it("rejects the development rate-limit namespace in production", () => {
+    expect(() =>
+      validateEnvironment({
+        ...VALID_ENVIRONMENT,
+        NODE_ENV: "production",
+        AUTH_RATE_LIMIT_NAMESPACE: "asset-management-development",
+      }),
+    ).toThrow(/AUTH_RATE_LIMIT_NAMESPACE:/);
   });
 
   it("requires previous JWT key values as a pair", () => {

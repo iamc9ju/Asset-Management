@@ -20,6 +20,7 @@ import { TypeOrmAuthSessionQueryRepository } from "./auth-session-query.reposito
 import { TypeOrmAuthSessionRepository } from "./auth-session.repository";
 import { TypeOrmRefreshSessionRepository } from "./refresh-session.repository";
 import { TypeOrmSessionManagementRepository } from "./session-management.repository";
+import { TypeOrmAuthRetentionRepository } from "./auth-retention.repository";
 import { AuthRefreshTokenOrmEntity } from "./entities/auth-refresh-token.orm-entity";
 import { AuthSessionOrmEntity } from "./entities/auth-session.orm-entity";
 
@@ -42,6 +43,7 @@ describeWithDatabase("TypeOrmAuthSessionRepository integration", () => {
   let sessionManagementRepository: TypeOrmSessionManagementRepository;
   let sessionQueryRepository: TypeOrmAuthSessionQueryRepository;
   let eventRepository: TypeOrmAuthEventRepository;
+  let retentionRepository: TypeOrmAuthRetentionRepository;
   let schemaCreated = false;
 
   beforeAll(async () => {
@@ -118,6 +120,7 @@ describeWithDatabase("TypeOrmAuthSessionRepository integration", () => {
       dataSource.getRepository(AuthSessionOrmEntity),
     );
     eventRepository = new TypeOrmAuthEventRepository(dataSource);
+    retentionRepository = new TypeOrmAuthRetentionRepository(dataSource);
   });
 
   beforeEach(async () => {
@@ -786,5 +789,68 @@ describeWithDatabase("TypeOrmAuthSessionRepository integration", () => {
       expect.objectContaining({ revoked_at: null }),
     );
     expect(activityCountRows[0]).toEqual({ count: 2 });
+  });
+
+  it("deletes only retained revoked sessions and their token chains while preserving activity history", async () => {
+    const userId = await insertUser();
+    const eligibleInput = createInput(userId);
+    const activeInput = createInput(userId, {
+      refreshTokenHash: "d".repeat(64),
+    });
+    await repository.createLoginSession(eligibleInput);
+    await repository.createLoginSession(activeInput);
+
+    const rotationInput = createRotationInput(eligibleInput, {
+      replacementTokenHash: "e".repeat(64),
+      occurredAt: new Date("2026-09-18T08:00:00.000Z"),
+    });
+    await refreshRepository.rotate(rotationInput);
+    await dataSource.query(
+      `
+        UPDATE auth_sessions
+        SET revoked_at = $1, revoke_reason = $2
+        WHERE id = $3
+      `,
+      [
+        new Date("2026-09-19T08:00:00.000Z"),
+        AUTH_SESSION_REVOKE_REASON.USER_LOGOUT,
+        eligibleInput.sessionId,
+      ],
+    );
+
+    const cutoff = new Date("2026-09-20T08:00:00.000Z");
+    await expect(retentionRepository.countEligible(cutoff)).resolves.toBe(1);
+    await expect(
+      retentionRepository.cleanup({ cutoff, batchSize: 1, maxBatches: 2 }),
+    ).resolves.toEqual({
+      lockAcquired: true,
+      deletedSessions: 1,
+      completedBatches: 1,
+      hasMore: false,
+    });
+
+    const sessionRows = (await dataSource.query(
+      "SELECT id FROM auth_sessions ORDER BY id",
+    )) as Array<{ id: string }>;
+    const eligibleTokenCountRows = (await dataSource.query(
+      "SELECT count(*)::integer AS count FROM auth_refresh_tokens WHERE session_id = $1",
+      [eligibleInput.sessionId],
+    )) as Array<{ count: number }>;
+    const retainedActivityCountRows = (await dataSource.query(
+      "SELECT count(*)::integer AS count FROM activity_logs WHERE entity_id = $1",
+      [eligibleInput.sessionId],
+    )) as Array<{ count: number }>;
+
+    expect(sessionRows).toEqual([{ id: activeInput.sessionId }]);
+    expect(eligibleTokenCountRows[0]).toEqual({ count: 0 });
+    expect(retainedActivityCountRows[0]?.count).toBeGreaterThan(0);
+    await expect(
+      retentionRepository.cleanup({ cutoff, batchSize: 1, maxBatches: 2 }),
+    ).resolves.toEqual({
+      lockAcquired: true,
+      deletedSessions: 0,
+      completedBatches: 0,
+      hasMore: false,
+    });
   });
 });
