@@ -97,7 +97,7 @@ export function assertDirectTestDatabaseUrl(
 ): asserts databaseUrl is string {
   if (!databaseUrl) {
     throw new Error(
-      "DATABASE_URL_UNPOOLED must target a direct development database endpoint",
+      "DATABASE_URL_UNPOOLED must target a direct test database endpoint",
     );
   }
 

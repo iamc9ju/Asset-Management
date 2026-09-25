@@ -19,7 +19,7 @@ import {
 } from "./seed-permissions-and-roles";
 
 const DATABASE_URL = process.env.DATABASE_URL_UNPOOLED;
-const describeWithDatabase = DATABASE_URL ? describe : describe.skip;
+assertDirectTestDatabaseUrl(DATABASE_URL);
 
 jest.setTimeout(TEST_DATABASE_SUITE_TIMEOUT_MS);
 
@@ -36,7 +36,7 @@ function quoteIdentifier(identifier: string): string {
   return `"${identifier.replaceAll('"', '""')}"`;
 }
 
-describeWithDatabase("permission and system-role seed integration", () => {
+describe("permission and system-role seed integration", () => {
   const schemaName = `test_permission_seed_${randomUUID().replaceAll("-", "_")}`;
   const quotedSchemaName = quoteIdentifier(schemaName);
   const migration = new CreateInitialSchema1789236000000();
@@ -46,8 +46,6 @@ describeWithDatabase("permission and system-role seed integration", () => {
   let migrationApplied = false;
 
   beforeAll(async () => {
-    assertDirectTestDatabaseUrl(DATABASE_URL);
-
     dataSource = await initializeTestDataSource(
       () =>
         new DataSource({

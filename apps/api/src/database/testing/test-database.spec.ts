@@ -137,4 +137,10 @@ describe("test database lifecycle", () => {
       ),
     ).toThrow("without the -pooler suffix");
   });
+
+  it("rejects a missing direct test database endpoint", () => {
+    expect(() => assertDirectTestDatabaseUrl(undefined)).toThrow(
+      "DATABASE_URL_UNPOOLED must target a direct test database endpoint",
+    );
+  });
 });

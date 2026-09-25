@@ -26,9 +26,24 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
+      DATABASE_URL: postgresql://asset_test:asset_test_password@localhost:5432/asset_management_test
+      DATABASE_URL_UNPOOLED: postgresql://asset_test:asset_test_password@localhost:5432/asset_management_test
       REDIS_URL: redis://localhost:6379
 
     services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: asset_management_test
+          POSTGRES_USER: asset_test
+          POSTGRES_PASSWORD: asset_test_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U asset_test -d asset_management_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
       redis:
         image: redis:7-alpine
         ports:

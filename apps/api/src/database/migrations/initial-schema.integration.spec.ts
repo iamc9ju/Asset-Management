@@ -12,7 +12,7 @@ import { CreateInitialSchema1789236000000 } from "./1789236000000-CreateInitialS
 import { AddAuthRetentionIndexes1790283600000 } from "./1790283600000-AddAuthRetentionIndexes";
 
 const DATABASE_URL = process.env.DATABASE_URL_UNPOOLED;
-const describeWithDatabase = DATABASE_URL ? describe : describe.skip;
+assertDirectTestDatabaseUrl(DATABASE_URL);
 const EXPECTED_TABLE_COUNT = 24;
 
 jest.setTimeout(TEST_DATABASE_SUITE_TIMEOUT_MS);
@@ -28,7 +28,7 @@ function quoteIdentifier(identifier: string): string {
   return `"${identifier.replaceAll('"', '""')}"`;
 }
 
-describeWithDatabase("CreateInitialSchema migration integration", () => {
+describe("CreateInitialSchema migration integration", () => {
   const schemaName = `test_initial_schema_${randomUUID().replaceAll("-", "_")}`;
   const quotedSchemaName = quoteIdentifier(schemaName);
   const migration = new CreateInitialSchema1789236000000();
@@ -41,8 +41,6 @@ describeWithDatabase("CreateInitialSchema migration integration", () => {
   let retentionMigrationApplied = false;
 
   beforeAll(async () => {
-    assertDirectTestDatabaseUrl(DATABASE_URL);
-
     dataSource = await initializeTestDataSource(
       () =>
         new DataSource({

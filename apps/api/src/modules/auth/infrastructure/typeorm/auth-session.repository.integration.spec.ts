@@ -25,14 +25,14 @@ import { AuthRefreshTokenOrmEntity } from "./entities/auth-refresh-token.orm-ent
 import { AuthSessionOrmEntity } from "./entities/auth-session.orm-entity";
 
 const DATABASE_URL = process.env.DATABASE_URL_UNPOOLED;
-const describeWithDatabase = DATABASE_URL ? describe : describe.skip;
+assertDirectTestDatabaseUrl(DATABASE_URL);
 const NOW = new Date("2026-09-17T08:00:00.000Z");
 const IDLE_EXPIRES_AT = new Date("2026-09-24T08:00:00.000Z");
 const ABSOLUTE_EXPIRES_AT = new Date("2026-10-17T08:00:00.000Z");
 
 jest.setTimeout(TEST_DATABASE_SUITE_TIMEOUT_MS);
 
-describeWithDatabase("TypeOrmAuthSessionRepository integration", () => {
+describe("TypeOrmAuthSessionRepository integration", () => {
   const schemaName = `test_auth_login_${randomUUID().replaceAll("-", "_")}`;
   const quotedSchemaName = `"${schemaName}"`;
   const migration = new CreateInitialSchema1789236000000();
@@ -47,8 +47,6 @@ describeWithDatabase("TypeOrmAuthSessionRepository integration", () => {
   let schemaCreated = false;
 
   beforeAll(async () => {
-    assertDirectTestDatabaseUrl(DATABASE_URL);
-
     const bootstrapDataSource = await initializeTestDataSource(
       () =>
         new DataSource({
