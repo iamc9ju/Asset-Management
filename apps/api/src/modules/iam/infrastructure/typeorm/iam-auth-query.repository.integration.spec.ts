@@ -17,7 +17,7 @@ import { UserRoleOrmEntity } from "./entities/user-role.orm-entity";
 import { UserOrmEntity } from "./entities/user.orm-entity";
 
 const DATABASE_URL = process.env.DATABASE_URL_UNPOOLED;
-const describeWithDatabase = DATABASE_URL ? describe : describe.skip;
+assertDirectTestDatabaseUrl(DATABASE_URL);
 
 jest.setTimeout(TEST_DATABASE_SUITE_TIMEOUT_MS);
 
@@ -36,7 +36,7 @@ function quoteIdentifier(identifier: string): string {
   return `"${identifier.replaceAll('"', '""')}"`;
 }
 
-describeWithDatabase("TypeOrmIamAuthQueryRepository integration", () => {
+describe("TypeOrmIamAuthQueryRepository integration", () => {
   const schemaName = `test_iam_auth_query_${randomUUID().replaceAll("-", "_")}`;
   const quotedSchemaName = quoteIdentifier(schemaName);
   const migration = new CreateInitialSchema1789236000000();
@@ -49,8 +49,6 @@ describeWithDatabase("TypeOrmIamAuthQueryRepository integration", () => {
   let migrationApplied = false;
 
   beforeAll(async () => {
-    assertDirectTestDatabaseUrl(DATABASE_URL);
-
     dataSource = await initializeTestDataSource(
       () =>
         new DataSource({

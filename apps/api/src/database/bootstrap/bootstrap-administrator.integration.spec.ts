@@ -27,7 +27,7 @@ import {
 } from "./bootstrap-administrator";
 
 const DATABASE_URL = process.env.DATABASE_URL_UNPOOLED;
-const describeWithDatabase = DATABASE_URL ? describe : describe.skip;
+assertDirectTestDatabaseUrl(DATABASE_URL);
 const FAST_TEST_PASSWORD_HASH = "$argon2id$bootstrap-integration-test-hash";
 
 jest.setTimeout(TEST_DATABASE_SUITE_TIMEOUT_MS);
@@ -93,7 +93,7 @@ function createDependencies(
   };
 }
 
-describeWithDatabase("bootstrap administrator integration", () => {
+describe("bootstrap administrator integration", () => {
   const schemaName = `test_admin_bootstrap_${randomUUID().replaceAll("-", "_")}`;
   const quotedSchemaName = quoteIdentifier(schemaName);
   const migration = new CreateInitialSchema1789236000000();
@@ -103,8 +103,6 @@ describeWithDatabase("bootstrap administrator integration", () => {
   let migrationApplied = false;
 
   beforeAll(async () => {
-    assertDirectTestDatabaseUrl(DATABASE_URL);
-
     dataSource = await initializeTestDataSource(
       () =>
         new DataSource({
