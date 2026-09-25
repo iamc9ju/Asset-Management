@@ -13,7 +13,9 @@
       "dependsOn": ["^lint"]
     },
     "test": {
-      "dependsOn": ["^build"]
+      "dependsOn": ["^build"],
+      "cache": false,
+      "env": ["REDIS_URL", "DATABASE_URL", "DATABASE_URL_UNPOOLED"]
     },
     "typecheck": {
       "dependsOn": ["^typecheck"]
