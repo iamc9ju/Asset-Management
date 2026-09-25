@@ -1,5 +1,9 @@
 export const API_GLOBAL_PREFIX = "api/v1";
 
+export const HTTP_RESPONSE_HEADER = {
+  RETRY_AFTER: "Retry-After",
+} as const;
+
 export const API_ROUTE_PARAM = {
   AUTH_SESSION_ID: "sessionId",
 } as const;

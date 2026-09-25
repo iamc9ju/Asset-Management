@@ -8,9 +8,10 @@ import { Logger } from "nestjs-pino";
 import { ApplicationLifecycleLogger } from "./shared/logging/application-lifecycle.logger";
 import { configureOpenApi } from "./config/openapi.config";
 import { API_GLOBAL_PREFIX } from "./shared/http/api-route.constants";
+import type { NestExpressApplication } from "@nestjs/platform-express";
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, {
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     bufferLogs: true,
   });
 
@@ -20,6 +21,11 @@ async function bootstrap() {
 
   const port = config.getOrThrow<number>("API_PORT");
   const webOrigin = config.getOrThrow<string>("WEB_ORIGIN");
+  const trustProxyHops = config.getOrThrow<number>("HTTP_TRUST_PROXY_HOPS");
+
+  if (trustProxyHops > 0) {
+    app.set("trust proxy", trustProxyHops);
+  }
 
   app.use(requestIdMiddleware);
   app.useGlobalPipes(createValidationPipe());

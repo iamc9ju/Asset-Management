@@ -3,6 +3,7 @@ import { JwtModule } from "@nestjs/jwt";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { IamModule } from "../iam/iam.module";
 import { ACCESS_TOKEN_SERVICE } from "./application/ports/access-token.port";
+import { AUTH_RATE_LIMITER } from "./application/ports/auth-rate-limiter.port";
 import { AUTH_EVENT_REPOSITORY } from "./application/ports/auth-event.port";
 import { AUTH_SESSION_QUERY } from "./application/ports/auth-session-query.port";
 import { AUTH_SESSION_REPOSITORY } from "./application/ports/auth-session-repository.port";
@@ -13,6 +14,7 @@ import { IDENTIFIER_GENERATOR } from "./application/ports/identifier-generator.p
 import { PASSWORD_HASHER } from "./application/ports/password-hasher.port";
 import { REFRESH_TOKEN_SERVICE } from "./application/ports/refresh-token.port";
 import { AuthenticateAccessTokenService } from "./application/services/authenticate-access-token.service";
+import { AuthRateLimitService } from "./application/services/auth-rate-limit.service";
 import { LoginService } from "./application/services/login.service";
 import { ListAuthSessionsService } from "./application/services/list-auth-sessions.service";
 import { LogoutService } from "./application/services/logout.service";
@@ -20,12 +22,15 @@ import { RefreshSessionService } from "./application/services/refresh-session.se
 import { RevokeAllAuthSessionsService } from "./application/services/revoke-all-auth-sessions.service";
 import { RevokeAuthSessionService } from "./application/services/revoke-auth-session.service";
 import { accessTokenConfigProvider } from "./infrastructure/config/access-token-config.provider";
+import { authRateLimitConfigProvider } from "./infrastructure/config/auth-rate-limit-config.provider";
 import { authSessionConfigProvider } from "./infrastructure/config/auth-session-config.provider";
 import { Argon2PasswordHasher } from "./infrastructure/crypto/argon2-password-hasher";
 import { JwtAccessTokenService } from "./infrastructure/crypto/jwt-access-token.service";
 import { OpaqueRefreshTokenService } from "./infrastructure/crypto/opaque-refresh-token.service";
 import { UuidIdentifierGenerator } from "./infrastructure/crypto/uuid-identifier-generator";
 import { SystemClock } from "./infrastructure/time/system-clock";
+import { AuthRateLimitKeyFactory } from "./infrastructure/redis/auth-rate-limit-key.factory";
+import { RedisAuthRateLimiter } from "./infrastructure/redis/redis-auth-rate-limiter";
 import { TypeOrmAuthEventRepository } from "./infrastructure/typeorm/auth-event.repository";
 import { TypeOrmAuthSessionQueryRepository } from "./infrastructure/typeorm/auth-session-query.repository";
 import { TypeOrmAuthSessionRepository } from "./infrastructure/typeorm/auth-session.repository";
@@ -49,6 +54,7 @@ import { PermissionGuard } from "./presentation/guards/permission.guard";
   controllers: [AuthController],
   providers: [
     accessTokenConfigProvider,
+    authRateLimitConfigProvider,
     authSessionConfigProvider,
     {
       provide: CLOCK,
@@ -71,6 +77,10 @@ import { PermissionGuard } from "./presentation/guards/permission.guard";
       useClass: UuidIdentifierGenerator,
     },
     {
+      provide: AUTH_RATE_LIMITER,
+      useClass: RedisAuthRateLimiter,
+    },
+    {
       provide: AUTH_SESSION_REPOSITORY,
       useClass: TypeOrmAuthSessionRepository,
     },
@@ -91,6 +101,8 @@ import { PermissionGuard } from "./presentation/guards/permission.guard";
       useClass: TypeOrmAuthEventRepository,
     },
     LoginService,
+    AuthRateLimitService,
+    AuthRateLimitKeyFactory,
     RefreshSessionService,
     LogoutService,
     ListAuthSessionsService,

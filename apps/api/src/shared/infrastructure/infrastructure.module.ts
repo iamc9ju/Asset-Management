@@ -3,6 +3,7 @@ import { Global, Module } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import Redis from "ioredis";
 import { REDIS_CLIENT, S3_CLIENT } from "./infrastructure.constants";
+import { RedisLifecycleService } from "./redis-lifecycle.service";
 
 @Global()
 @Module({
@@ -21,6 +22,7 @@ import { REDIS_CLIENT, S3_CLIENT } from "./infrastructure.constants";
         });
       },
     },
+    RedisLifecycleService,
     {
       provide: S3_CLIENT,
       inject: [ConfigService],

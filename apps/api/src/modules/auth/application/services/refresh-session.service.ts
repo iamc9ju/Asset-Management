@@ -25,6 +25,7 @@ import {
   REFRESH_TOKEN_SERVICE,
   type RefreshTokenService,
 } from "../ports/refresh-token.port";
+import { AuthRateLimitService } from "./auth-rate-limit.service";
 
 export interface RefreshSessionCommand {
   readonly rawRefreshToken: string;
@@ -54,9 +55,11 @@ export class RefreshSessionService {
     private readonly accessTokenConfig: AccessTokenConfig,
     @Inject(AUTH_SESSION_CONFIG)
     private readonly authSessionConfig: AuthSessionConfig,
+    private readonly authRateLimitService: AuthRateLimitService,
   ) {}
 
   async execute(command: RefreshSessionCommand): Promise<RefreshSessionResult> {
+    await this.authRateLimitService.assertRefreshIpAllowed(command.client);
     const presentedToken = this.refreshTokenService.parseAndHash(
       command.rawRefreshToken,
     );
@@ -64,6 +67,11 @@ export class RefreshSessionService {
     if (!presentedToken) {
       throw new AppError(APP_ERROR_CODE.AUTH_SESSION_INVALID);
     }
+
+    await this.authRateLimitService.assertRefreshTokenAllowed(
+      presentedToken.tokenId,
+      command.client,
+    );
 
     const replacementToken = this.refreshTokenService.issue();
     const rotation = await this.refreshSessionRepository.rotate({

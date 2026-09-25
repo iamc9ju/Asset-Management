@@ -15,6 +15,7 @@ import { APP_ERROR_CODE } from "../../../../shared/errors/app-error-code";
 import { AppError } from "../../../../shared/errors/app-error";
 import { AUTH_TOKEN_TYPE } from "../../domain/auth.constants";
 import { LoginService } from "./login.service";
+import { AuthRateLimitService } from "./auth-rate-limit.service";
 
 const NOW = new Date("2026-09-17T08:00:00.000Z");
 const USER_ID = "11111111-1111-4111-8111-111111111111";
@@ -50,7 +51,17 @@ function createService() {
   };
   const authEventRepository: jest.Mocked<AuthEventRepository> = {
     recordLoginFailure: jest.fn(),
+    recordRateLimitExceeded: jest.fn(),
+    recordAuthorizationDenied: jest.fn(),
+    recordRetentionCleanupCompleted: jest.fn(),
   };
+  const authRateLimitService = {
+    assertLoginAllowed: jest.fn(),
+    recordLoginFailure: jest.fn(),
+    recordLoginSuccess: jest.fn(),
+    assertRefreshIpAllowed: jest.fn(),
+    assertRefreshTokenAllowed: jest.fn(),
+  } as unknown as jest.Mocked<AuthRateLimitService>;
   const identifierGenerator: jest.Mocked<IdentifierGenerator> = {
     generate: jest.fn(),
   };
@@ -78,6 +89,7 @@ function createService() {
     clock,
     accessTokenConfig,
     authSessionConfig,
+    authRateLimitService,
   );
 
   return {
@@ -88,6 +100,7 @@ function createService() {
     refreshTokenService,
     authSessionRepository,
     authEventRepository,
+    authRateLimitService,
     identifierGenerator,
   };
 }

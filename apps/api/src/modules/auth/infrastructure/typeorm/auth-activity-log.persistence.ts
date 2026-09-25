@@ -3,6 +3,9 @@ import type { EntityManager } from "typeorm";
 import {
   AUTH_EVENT_ACTION,
   type LoginFailureReason,
+  type RecordAuthorizationDeniedInput,
+  type RecordRateLimitExceededInput,
+  type RecordRetentionCleanupCompletedInput,
 } from "../../application/ports/auth-event.port";
 import type { AuthClientContext } from "../../application/ports/auth-client-context.port";
 import type { AuthSessionRevokeReason } from "../../domain/auth.constants";
@@ -10,6 +13,7 @@ import type { AuthSessionRevokeReason } from "../../domain/auth.constants";
 const ACTIVITY_ACTOR_TYPE = {
   USER: "USER",
   ANONYMOUS: "ANONYMOUS",
+  SYSTEM: "SYSTEM",
 } as const;
 
 const ACTIVITY_OUTCOME = {
@@ -154,6 +158,65 @@ export async function insertSessionRevokedActivity(
     entityType: ACTIVITY_ENTITY_TYPE.AUTH_SESSION,
     entityId: input.sessionId,
     metadata: { reason: input.reason },
+    outcome: ACTIVITY_OUTCOME.SUCCESS,
+    occurredAt: input.occurredAt,
+    client: input.client,
+  });
+}
+
+export async function insertRateLimitExceededActivity(
+  manager: EntityManager,
+  input: RecordRateLimitExceededInput,
+): Promise<void> {
+  await insertActivity(manager, {
+    actorUserId: null,
+    actorType: ACTIVITY_ACTOR_TYPE.ANONYMOUS,
+    action: AUTH_EVENT_ACTION.AUTH_RATE_LIMITED,
+    entityType: ACTIVITY_ENTITY_TYPE.AUTHENTICATION,
+    entityId: input.targetUserId,
+    metadata: { policy: input.policy },
+    outcome: ACTIVITY_OUTCOME.DENIED,
+    occurredAt: input.occurredAt,
+    client: input.client,
+  });
+}
+
+export async function insertAuthorizationDeniedActivity(
+  manager: EntityManager,
+  input: RecordAuthorizationDeniedInput,
+): Promise<void> {
+  await insertActivity(manager, {
+    actorUserId: input.actorUserId,
+    actorType: ACTIVITY_ACTOR_TYPE.USER,
+    action: AUTH_EVENT_ACTION.AUTHORIZATION_DENIED,
+    entityType: ACTIVITY_ENTITY_TYPE.AUTH_SESSION,
+    entityId: input.sessionId,
+    metadata: {
+      reason: input.reason,
+      required_permissions: input.requiredPermissions,
+    },
+    outcome: ACTIVITY_OUTCOME.DENIED,
+    occurredAt: input.occurredAt,
+    client: input.client,
+  });
+}
+
+export async function insertRetentionCleanupCompletedActivity(
+  manager: EntityManager,
+  input: RecordRetentionCleanupCompletedInput,
+): Promise<void> {
+  await insertActivity(manager, {
+    actorUserId: null,
+    actorType: ACTIVITY_ACTOR_TYPE.SYSTEM,
+    action: AUTH_EVENT_ACTION.AUTH_RETENTION_CLEANUP_COMPLETED,
+    entityType: ACTIVITY_ENTITY_TYPE.AUTHENTICATION,
+    entityId: null,
+    metadata: {
+      cutoff: input.cutoff.toISOString(),
+      deleted_sessions: input.deletedSessions,
+      completed_batches: input.completedBatches,
+      has_more: input.hasMore,
+    },
     outcome: ACTIVITY_OUTCOME.SUCCESS,
     occurredAt: input.occurredAt,
     client: input.client,

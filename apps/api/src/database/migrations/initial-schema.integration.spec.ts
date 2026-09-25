@@ -9,6 +9,7 @@ import {
   waitForTestDatabase,
 } from "../testing/test-database";
 import { CreateInitialSchema1789236000000 } from "./1789236000000-CreateInitialSchema";
+import { AddAuthRetentionIndexes1790283600000 } from "./1790283600000-AddAuthRetentionIndexes";
 
 const DATABASE_URL = process.env.DATABASE_URL_UNPOOLED;
 const describeWithDatabase = DATABASE_URL ? describe : describe.skip;
@@ -31,11 +32,13 @@ describeWithDatabase("CreateInitialSchema migration integration", () => {
   const schemaName = `test_initial_schema_${randomUUID().replaceAll("-", "_")}`;
   const quotedSchemaName = quoteIdentifier(schemaName);
   const migration = new CreateInitialSchema1789236000000();
+  const retentionMigration = new AddAuthRetentionIndexes1790283600000();
 
   let dataSource: DataSource;
   let queryRunner: QueryRunner;
   let schemaCreated = false;
   let migrationApplied = false;
+  let retentionMigrationApplied = false;
 
   beforeAll(async () => {
     assertDirectTestDatabaseUrl(DATABASE_URL);
@@ -70,6 +73,8 @@ describeWithDatabase("CreateInitialSchema migration integration", () => {
 
     await migration.up(queryRunner);
     migrationApplied = true;
+    await retentionMigration.up(queryRunner);
+    retentionMigrationApplied = true;
   });
 
   beforeEach(async () => {
@@ -93,6 +98,11 @@ describeWithDatabase("CreateInitialSchema migration integration", () => {
     try {
       if (queryRunner.isTransactionActive) {
         await queryRunner.rollbackTransaction();
+      }
+
+      if (retentionMigrationApplied) {
+        await retentionMigration.down(queryRunner);
+        retentionMigrationApplied = false;
       }
 
       if (migrationApplied) {
@@ -344,6 +354,20 @@ describeWithDatabase("CreateInitialSchema migration integration", () => {
     )) as Array<{ table_count: number }>;
 
     expect(result[0]?.table_count).toBe(EXPECTED_TABLE_COUNT);
+  });
+
+  it("creates the partial revoked-session retention index", async () => {
+    const rows = (await queryRunner.query(
+      `
+        SELECT indexdef
+        FROM pg_indexes
+        WHERE schemaname = $1
+          AND indexname = 'ix_auth_sessions_revoked_at'
+      `,
+      [schemaName],
+    )) as Array<{ indexdef: string }>;
+
+    expect(rows[0]?.indexdef).toContain("WHERE (revoked_at IS NOT NULL)");
   });
 
   it("rejects case-insensitive duplicate user emails", async () => {

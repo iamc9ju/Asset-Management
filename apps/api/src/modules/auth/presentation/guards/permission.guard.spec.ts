@@ -13,6 +13,9 @@ import type { AuthenticatedIdentity } from "../../domain/authenticated-identity"
 import type { AuthenticatedRequest } from "../authenticated-request";
 import { REQUIRED_PERMISSIONS_METADATA } from "../required-permissions.metadata";
 import { PermissionGuard } from "./permission.guard";
+import type { AuthEventRepository } from "../../application/ports/auth-event.port";
+import { AUTHORIZATION_DENIAL_REASON } from "../../application/ports/auth-event.port";
+import type { Clock } from "../../application/ports/clock.port";
 
 const AUTHENTICATED_IDENTITY: AuthenticatedIdentity = {
   userId: "11111111-1111-4111-8111-111111111111",
@@ -22,15 +25,17 @@ const AUTHENTICATED_IDENTITY: AuthenticatedIdentity = {
   permissionVersion: "1",
   permissionCodes: [PERMISSION_CODE.ASSET_READ, PERMISSION_CODE.ASSET_UPDATE],
 };
+const NOW = new Date("2026-09-25T09:00:00.000Z");
+const REQUEST_ID = "33333333-3333-4333-8333-333333333333";
 
 function permissionProtectedHandler(): void {}
 
-function expectAppErrorCode(
-  operation: () => unknown,
+async function expectAppErrorCode(
+  operation: () => Promise<unknown>,
   code: AppErrorCode,
-): void {
+): Promise<void> {
   try {
-    operation();
+    await operation();
     throw new Error(`Expected ${code} to be thrown`);
   } catch (error) {
     expect(error).toMatchObject({ code });
@@ -58,7 +63,10 @@ function createContext(
 
   const request = {
     authenticatedIdentity: options.identity,
-  } as AuthenticatedRequest;
+    requestId: REQUEST_ID,
+    ip: "127.0.0.1",
+    get: jest.fn().mockReturnValue("Permission guard test"),
+  } as unknown as AuthenticatedRequest;
 
   return {
     getHandler: () => permissionProtectedHandler,
@@ -69,9 +77,24 @@ function createContext(
 }
 
 describe("PermissionGuard", () => {
-  const guard = new PermissionGuard(new Reflector());
+  const authEventRepository: jest.Mocked<AuthEventRepository> = {
+    recordLoginFailure: jest.fn(),
+    recordRateLimitExceeded: jest.fn(),
+    recordAuthorizationDenied: jest.fn(),
+    recordRetentionCleanupCompleted: jest.fn(),
+  };
+  const clock: Clock = { now: () => new Date(NOW) };
+  const guard = new PermissionGuard(
+    new Reflector(),
+    authEventRepository,
+    clock,
+  );
 
-  it("allows an identity that has every required permission", () => {
+  beforeEach(() => {
+    authEventRepository.recordAuthorizationDenied.mockReset();
+  });
+
+  it("allows an identity that has every required permission", async () => {
     const context = createContext({
       identity: AUTHENTICATED_IDENTITY,
       requiredPermissions: [
@@ -80,10 +103,13 @@ describe("PermissionGuard", () => {
       ],
     });
 
-    expect(guard.canActivate(context)).toBe(true);
+    await expect(guard.canActivate(context)).resolves.toBe(true);
+    expect(
+      authEventRepository.recordAuthorizationDenied,
+    ).not.toHaveBeenCalled();
   });
 
-  it("denies an identity that is missing any required permission", () => {
+  it("denies an identity that is missing any required permission", async () => {
     const context = createContext({
       identity: AUTHENTICATED_IDENTITY,
       requiredPermissions: [
@@ -92,29 +118,55 @@ describe("PermissionGuard", () => {
       ],
     });
 
-    expectAppErrorCode(
+    await expectAppErrorCode(
       () => guard.canActivate(context),
       APP_ERROR_CODE.AUTH_PERMISSION_DENIED,
     );
+    expect(authEventRepository.recordAuthorizationDenied).toHaveBeenCalledWith(
+      {
+        actorUserId: AUTHENTICATED_IDENTITY.userId,
+        sessionId: AUTHENTICATED_IDENTITY.sessionId,
+        requiredPermissions: [
+          PERMISSION_CODE.ASSET_READ,
+          PERMISSION_CODE.ASSET_TRANSFER,
+        ],
+        reason: AUTHORIZATION_DENIAL_REASON.MISSING_REQUIRED_PERMISSION,
+        occurredAt: NOW,
+        client: {
+          requestId: REQUEST_ID,
+          ipAddress: "127.0.0.1",
+          userAgent: "Permission guard test",
+        },
+      },
+    );
   });
 
-  it("returns an authentication error when the access-token guard did not attach an identity", () => {
+  it("returns an authentication error when the access-token guard did not attach an identity", async () => {
     const context = createContext({
       requiredPermissions: [PERMISSION_CODE.ASSET_READ],
     });
 
-    expectAppErrorCode(
+    await expectAppErrorCode(
       () => guard.canActivate(context),
       APP_ERROR_CODE.AUTH_SESSION_INVALID,
     );
+    expect(
+      authEventRepository.recordAuthorizationDenied,
+    ).not.toHaveBeenCalled();
   });
 
-  it("fails closed when the guard is used without permission metadata", () => {
+  it("fails closed when the guard is used without permission metadata", async () => {
     const context = createContext({ identity: AUTHENTICATED_IDENTITY });
 
-    expectAppErrorCode(
+    await expectAppErrorCode(
       () => guard.canActivate(context),
       APP_ERROR_CODE.AUTH_PERMISSION_DENIED,
+    );
+    expect(authEventRepository.recordAuthorizationDenied).toHaveBeenCalledWith(
+      expect.objectContaining({
+        requiredPermissions: [],
+        reason: AUTHORIZATION_DENIAL_REASON.MISSING_PERMISSION_METADATA,
+      }),
     );
   });
 });

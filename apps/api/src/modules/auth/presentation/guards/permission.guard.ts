@@ -1,6 +1,7 @@
 import {
   type CanActivate,
   type ExecutionContext,
+  Inject,
   Injectable,
 } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
@@ -9,22 +10,43 @@ import { AppError } from "../../../../shared/errors/app-error";
 import type { PermissionCode } from "../../../iam/domain/permission-code";
 import type { AuthenticatedRequest } from "../authenticated-request";
 import { REQUIRED_PERMISSIONS_METADATA } from "../required-permissions.metadata";
+import {
+  AUTH_EVENT_REPOSITORY,
+  AUTHORIZATION_DENIAL_REASON,
+  type AuthEventRepository,
+  type AuthorizationDenialReason,
+} from "../../application/ports/auth-event.port";
+import { CLOCK, type Clock } from "../../application/ports/clock.port";
+import { createAuthClientContext } from "../auth-request-context";
 
 @Injectable()
 export class PermissionGuard implements CanActivate {
-  constructor(private readonly reflector: Reflector) {}
+  constructor(
+    private readonly reflector: Reflector,
+    @Inject(AUTH_EVENT_REPOSITORY)
+    private readonly authEventRepository: AuthEventRepository,
+    @Inject(CLOCK) private readonly clock: Clock,
+  ) {}
 
-  canActivate(context: ExecutionContext): boolean {
+  async canActivate(context: ExecutionContext): Promise<boolean> {
     const requiredPermissions = this.reflector.get<
       readonly PermissionCode[] | undefined
     >(REQUIRED_PERMISSIONS_METADATA, context.getHandler());
-
-    if (!requiredPermissions?.length) {
-      throw new AppError(APP_ERROR_CODE.AUTH_PERMISSION_DENIED);
-    }
-
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
     const identity = request.authenticatedIdentity;
+
+    if (!requiredPermissions?.length) {
+      if (identity) {
+        await this.recordDenial(
+          request,
+          identity.userId,
+          identity.sessionId,
+          [],
+          AUTHORIZATION_DENIAL_REASON.MISSING_PERMISSION_METADATA,
+        );
+      }
+      throw new AppError(APP_ERROR_CODE.AUTH_PERMISSION_DENIED);
+    }
 
     if (!identity) {
       throw new AppError(APP_ERROR_CODE.AUTH_SESSION_INVALID);
@@ -36,9 +58,33 @@ export class PermissionGuard implements CanActivate {
     );
 
     if (!hasEveryRequiredPermission) {
+      await this.recordDenial(
+        request,
+        identity.userId,
+        identity.sessionId,
+        requiredPermissions,
+        AUTHORIZATION_DENIAL_REASON.MISSING_REQUIRED_PERMISSION,
+      );
       throw new AppError(APP_ERROR_CODE.AUTH_PERMISSION_DENIED);
     }
 
     return true;
+  }
+
+  private recordDenial(
+    request: AuthenticatedRequest,
+    actorUserId: string,
+    sessionId: string,
+    requiredPermissions: readonly PermissionCode[],
+    reason: AuthorizationDenialReason,
+  ): Promise<void> {
+    return this.authEventRepository.recordAuthorizationDenied({
+      actorUserId,
+      sessionId,
+      requiredPermissions,
+      reason,
+      occurredAt: this.clock.now(),
+      client: createAuthClientContext(request),
+    });
   }
 }

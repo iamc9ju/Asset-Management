@@ -8,6 +8,8 @@ import {
 import type { Response } from "express";
 import type { ErrorResponseEnvelope } from "../../errors/error-response.types";
 import type { RequestWithLoggingContext } from "../../logging/logging.types";
+import { AppError } from "../../errors/app-error";
+import { HTTP_RESPONSE_HEADER } from "../api-route.constants";
 import { REQUEST_ID_HEADER } from "../request-id/request-id.constants";
 import { mapHttpException } from "./http-error.mapper";
 
@@ -37,6 +39,17 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     };
 
     response.setHeader(REQUEST_ID_HEADER, requestId);
+
+    if (
+      exception instanceof AppError &&
+      Number.isSafeInteger(exception.retryAfterSeconds) &&
+      (exception.retryAfterSeconds ?? 0) > 0
+    ) {
+      response.setHeader(
+        HTTP_RESPONSE_HEADER.RETRY_AFTER,
+        String(exception.retryAfterSeconds),
+      );
+    }
 
     const body: ErrorResponseEnvelope = {
       error: {

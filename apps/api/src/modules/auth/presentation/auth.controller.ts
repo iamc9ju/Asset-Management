@@ -25,7 +25,9 @@ import {
   ApiParam,
   ApiProduces,
   ApiTags,
+  ApiTooManyRequestsResponse,
   ApiUnauthorizedResponse,
+  ApiServiceUnavailableResponse,
 } from "@nestjs/swagger";
 import type { Response } from "express";
 import {
@@ -114,6 +116,20 @@ export class AuthController {
     description:
       "The email is unknown, the password is incorrect, or the account is not active.",
   })
+  @ApiTooManyRequestsResponse({
+    type: ErrorResponseEnvelopeOpenApi,
+    description: "The login IP or normalized account limit was exceeded.",
+    headers: {
+      "Retry-After": {
+        description: "Seconds until another authentication attempt is allowed.",
+        schema: { type: "integer", minimum: 1 },
+      },
+    },
+  })
+  @ApiServiceUnavailableResponse({
+    type: ErrorResponseEnvelopeOpenApi,
+    description: "The authentication rate-limit dependency is unavailable.",
+  })
   @ApiInternalServerErrorResponse({ type: ErrorResponseEnvelopeOpenApi })
   async login(
     @Body() body: LoginRequestDto,
@@ -177,6 +193,20 @@ export class AuthController {
         schema: { type: "string" },
       },
     },
+  })
+  @ApiTooManyRequestsResponse({
+    type: ErrorResponseEnvelopeOpenApi,
+    description: "The refresh IP or credential-selector limit was exceeded.",
+    headers: {
+      "Retry-After": {
+        description: "Seconds until another refresh attempt is allowed.",
+        schema: { type: "integer", minimum: 1 },
+      },
+    },
+  })
+  @ApiServiceUnavailableResponse({
+    type: ErrorResponseEnvelopeOpenApi,
+    description: "The authentication rate-limit dependency is unavailable.",
   })
   @ApiInternalServerErrorResponse({ type: ErrorResponseEnvelopeOpenApi })
   async refresh(
